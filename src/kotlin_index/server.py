@@ -155,9 +155,10 @@ def find_class(name: str) -> str:
     Returns:
         Путь к файлу и строка, где объявлен класс
     """
-    results = db.search_symbols(name, symbol_type=None, limit=10)
+    # Search with higher limit since we filter by type after
+    results = db.search_symbols(name, symbol_type=None, limit=100)
     # Фильтруем только классы и интерфейсы
-    results = [r for r in results if r["type"] in ("class", "interface", "object", "enum")]
+    results = [r for r in results if r["type"] in ("class", "interface", "object", "enum")][:20]
 
     if not results:
         return f"Класс/интерфейс '{name}' не найден"

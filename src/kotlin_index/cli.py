@@ -290,11 +290,13 @@ def find_symbol(
 @app.command("class")
 def find_class(
     name: str = typer.Argument(..., help="Class or interface name"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
 ):
-    """Find class/interface by name."""
+    """Find class/interface by name (contains search)."""
     db = get_db()
-    results = db.search_symbols(name, symbol_type=None, limit=10)
-    results = [r for r in results if r["type"] in ("class", "interface", "object", "enum")]
+    # Search with higher limit since we filter by type after
+    results = db.search_symbols(name, symbol_type=None, limit=limit * 5)
+    results = [r for r in results if r["type"] in ("class", "interface", "object", "enum")][:limit]
     db.close()
 
     if not results:
