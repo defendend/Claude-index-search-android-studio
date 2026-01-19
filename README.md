@@ -252,6 +252,11 @@ Check tree-sitter node types in `symbol_indexer.py`.
 
 ## Changelog
 
+### v2.1.0
+- Fix `class` command: now supports contains search (e.g., `kotlin-index class Interactor`)
+- Add `update` command for incremental indexing
+- Add `--limit` option to `class` command
+
 ### v2.0.0
 - pip package installation (`pip install kotlin-index`)
 - CLI with typer + rich
