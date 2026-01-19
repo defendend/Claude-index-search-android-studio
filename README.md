@@ -79,6 +79,10 @@ kotlin-index usages "UserRepository"
 | `kotlin-index extensions <type>` | Find extension functions for a type |
 | `kotlin-index api <module>` | Show public API of a module |
 | `kotlin-index deeplinks [query]` | Find deeplinks in AndroidManifest |
+| `kotlin-index composables [query]` | Find @Composable functions |
+| `kotlin-index previews` | Find @Preview functions |
+| `kotlin-index suspend [query]` | Find suspend functions |
+| `kotlin-index flows [query]` | Find Flow/StateFlow/SharedFlow usage |
 
 ### Module Commands
 
@@ -264,6 +268,12 @@ Check file filter in `module_indexer.py`.
 Check tree-sitter node types in `symbol_indexer.py`.
 
 ## Changelog
+
+### v2.5.0
+- Add `composables` command: find @Composable functions with optional filter
+- Add `previews` command: find @Preview functions for Compose
+- Add `suspend` command: find suspend functions with optional filter
+- Add `flows` command: find Flow/StateFlow/SharedFlow usage, grouped by type
 
 ### v2.4.1
 - Fix `callers` command: now uses grep-based search instead of references index

@@ -1179,6 +1179,246 @@ def find_deeplinks(
             console.print(f"  :{line_num} {content}")
 
 
+@app.command("composables")
+def find_composables(
+    query: Optional[str] = typer.Argument(None, help="Filter by function name"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
+):
+    """Find @Composable functions."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-A1", "@Composable",
+             "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = result.stdout
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Parse to extract function names
+    composables = []
+    lines = output.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if "@Composable" in line and not line.startswith("--"):
+            parts = line.split(":", 2)
+            if len(parts) >= 2:
+                file_path = parts[0].replace(root + "/", "")
+                line_num = parts[1]
+                # Get next line for function name
+                func_name = ""
+                if i + 1 < len(lines) and not lines[i + 1].startswith("--"):
+                    next_line = lines[i + 1]
+                    # Extract function name from "fun FunctionName(" pattern
+                    match = re.search(r'fun\s+(\w+)\s*\(', next_line)
+                    if match:
+                        func_name = match.group(1)
+                if func_name:
+                    composables.append((func_name, file_path, line_num))
+        i += 1
+
+    # Filter by query if provided
+    if query:
+        composables = [(n, f, l) for n, f, l in composables if query.lower() in n.lower()]
+
+    if not composables:
+        msg = f" matching '{query}'" if query else ""
+        console.print(f"[yellow]No @Composable functions found{msg}[/yellow]")
+        return
+
+    console.print(f"[bold]@Composable functions ({len(composables[:limit])}):[/bold]")
+    for func_name, file_path, line_num in composables[:limit]:
+        console.print(f"  [cyan]{func_name}[/cyan]: {file_path}:{line_num}")
+
+
+@app.command("previews")
+def find_previews(
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find @Preview functions (Compose previews)."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-B1", "-A1", "@Preview",
+             "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = result.stdout
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Parse to extract preview info
+    previews = []
+    lines = output.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if "@Preview" in line and not line.startswith("--"):
+            parts = line.split(":", 2)
+            if len(parts) >= 2:
+                file_path = parts[0].replace(root + "/", "")
+                line_num = parts[1]
+                # Extract preview params if any
+                preview_params = ""
+                if "(" in line:
+                    match = re.search(r'@Preview\(([^)]*)\)', line)
+                    if match:
+                        preview_params = match.group(1)[:40]
+                # Look for function name in next lines
+                func_name = ""
+                for j in range(1, 4):
+                    if i + j < len(lines) and not lines[i + j].startswith("--"):
+                        next_line = lines[i + j]
+                        match = re.search(r'fun\s+(\w+)\s*\(', next_line)
+                        if match:
+                            func_name = match.group(1)
+                            break
+                if func_name:
+                    previews.append((func_name, preview_params, file_path, line_num))
+        i += 1
+
+    if not previews:
+        console.print("[yellow]No @Preview functions found[/yellow]")
+        return
+
+    console.print(f"[bold]@Preview functions ({len(previews[:limit])}):[/bold]")
+    for func_name, params, file_path, line_num in previews[:limit]:
+        param_str = f" ({params})" if params else ""
+        console.print(f"  [cyan]{func_name}[/cyan]{param_str}")
+        console.print(f"    {file_path}:{line_num}")
+
+
+@app.command("suspend")
+def find_suspend(
+    query: Optional[str] = typer.Argument(None, help="Filter by function name"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
+):
+    """Find suspend functions."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-E", "suspend\\s+fun\\s+",
+             "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Parse and extract function names
+    suspends = []
+    for line in lines:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()
+            # Extract function name
+            match = re.search(r'suspend\s+fun\s+(\w+)', content)
+            if match:
+                func_name = match.group(1)
+                suspends.append((func_name, file_path, line_num, content[:60]))
+
+    # Filter by query if provided
+    if query:
+        suspends = [(n, f, l, c) for n, f, l, c in suspends if query.lower() in n.lower()]
+
+    if not suspends:
+        msg = f" matching '{query}'" if query else ""
+        console.print(f"[yellow]No suspend functions found{msg}[/yellow]")
+        return
+
+    console.print(f"[bold]Suspend functions ({len(suspends[:limit])}):[/bold]")
+    for func_name, file_path, line_num, content in suspends[:limit]:
+        console.print(f"  [cyan]{func_name}[/cyan]: {file_path}:{line_num}")
+
+
+@app.command("flows")
+def find_flows(
+    query: Optional[str] = typer.Argument(None, help="Filter by pattern"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
+):
+    """Find Flow, StateFlow, SharedFlow usage."""
+    import subprocess
+
+    root, _ = get_config()
+
+    # Search for Flow types
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-E", "(Flow<|StateFlow<|SharedFlow<|MutableStateFlow|MutableSharedFlow|flowOf|asFlow|channelFlow)",
+             "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Filter by query if provided
+    if query:
+        lines = [l for l in lines if query.lower() in l.lower()]
+
+    if not lines:
+        msg = f" matching '{query}'" if query else ""
+        console.print(f"[yellow]No Flow usage found{msg}[/yellow]")
+        return
+
+    # Group by type
+    by_type = {"StateFlow": [], "SharedFlow": [], "Flow": [], "Other": []}
+    for line in lines[:limit * 2]:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()[:70]
+
+            if "StateFlow" in content or "MutableStateFlow" in content:
+                by_type["StateFlow"].append((file_path, line_num, content))
+            elif "SharedFlow" in content or "MutableSharedFlow" in content:
+                by_type["SharedFlow"].append((file_path, line_num, content))
+            elif "Flow<" in content or "flowOf" in content or "asFlow" in content or "channelFlow" in content:
+                by_type["Flow"].append((file_path, line_num, content))
+            else:
+                by_type["Other"].append((file_path, line_num, content))
+
+    total = sum(len(v) for v in by_type.values())
+    console.print(f"[bold]Flow usage ({min(total, limit)}):[/bold]")
+
+    shown = 0
+    for flow_type, items in by_type.items():
+        if items and shown < limit:
+            console.print(f"\n[cyan]{flow_type} ({len(items)}):[/cyan]")
+            for file_path, line_num, content in items[:limit - shown]:
+                console.print(f"  {file_path}:{line_num}")
+                console.print(f"    {content}")
+                shown += 1
+                if shown >= limit:
+                    break
+
+
 @app.command("mcp")
 def run_mcp():
     """Start MCP server (requires kotlin-index[mcp])."""
