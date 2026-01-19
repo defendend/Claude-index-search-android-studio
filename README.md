@@ -2,7 +2,7 @@
 
 Fast code search for Android/Kotlin/Java projects using SQLite + FTS5.
 
-**v2.5.0** - Compose & Coroutines support, 33 CLI commands!
+**v2.5.1** - Performance boost with ripgrep!
 
 ## Features
 
@@ -52,6 +52,26 @@ kotlin-index search "PaymentMethod"
 kotlin-index class "MainActivity"
 kotlin-index usages "UserRepository"
 ```
+
+## Optional: Install ripgrep for faster searches
+
+Some commands use text search (grep). Installing [ripgrep](https://github.com/BurntSushi/ripgrep) provides **10-15x speedup**:
+
+```bash
+# macOS
+brew install ripgrep
+
+# Ubuntu/Debian
+sudo apt install ripgrep
+
+# Windows (scoop)
+scoop install ripgrep
+
+# Windows (chocolatey)
+choco install ripgrep
+```
+
+If ripgrep is not installed, commands will automatically fall back to grep.
 
 ## CLI Commands
 
@@ -268,6 +288,11 @@ Check file filter in `module_indexer.py`.
 Check tree-sitter node types in `symbol_indexer.py`.
 
 ## Changelog
+
+### v2.5.1
+- **Performance boost**: Use ripgrep (rg) instead of grep for 10-15x faster searches
+- All grep-based commands now use ripgrep with automatic fallback to grep if rg is not installed
+- Affected commands: `callers`, `todo`, `deprecated`, `suppress`, `extensions`, `deeplinks`, `provides`, `inject`, `annotations`, `composables`, `previews`, `suspend`, `flows`
 
 ### v2.5.0
 - Add `composables` command: find @Composable functions with optional filter

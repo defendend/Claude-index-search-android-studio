@@ -61,6 +61,64 @@ def get_db() -> Database:
     return db
 
 
+def run_search(pattern: str, root: str, context_before: int = 0, context_after: int = 0,
+               file_types: list[str] = None, timeout: int = 60, files_only: bool = False) -> str:
+    """
+    Run fast search using ripgrep (with grep fallback).
+    Returns stdout from the search command.
+
+    Args:
+        pattern: Regex pattern to search
+        root: Directory to search in
+        context_before: Lines of context before match (-B)
+        context_after: Lines of context after match (-A)
+        file_types: File globs to include (default: ["*.kt", "*.java"])
+        timeout: Command timeout in seconds
+        files_only: If True, return only file paths (no line numbers/content)
+    """
+    import shutil
+    import subprocess
+
+    if file_types is None:
+        file_types = ["*.kt", "*.java"]
+
+    # Try ripgrep first (much faster)
+    rg_path = shutil.which("rg")
+    if rg_path:
+        if files_only:
+            cmd = [rg_path, "-l", pattern]
+        else:
+            cmd = [rg_path, "-n", pattern]
+        for ft in file_types:
+            cmd.extend(["-g", ft])
+        if not files_only:
+            if context_before > 0:
+                cmd.extend(["-B", str(context_before)])
+            if context_after > 0:
+                cmd.extend(["-A", str(context_after)])
+        cmd.append(root)
+    else:
+        # Fallback to grep
+        if files_only:
+            cmd = ["grep", "-rl"]
+        else:
+            cmd = ["grep", "-rn"]
+            if context_before > 0:
+                cmd.extend([f"-B{context_before}"])
+            if context_after > 0:
+                cmd.extend([f"-A{context_after}"])
+        cmd.extend(["-E", pattern])
+        for ft in file_types:
+            cmd.extend([f"--include={ft}"])
+        cmd.append(root)
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return result.stdout
+    except Exception:
+        return ""
+
+
 @app.command()
 def version():
     """Show version."""
@@ -499,25 +557,14 @@ def find_annotations(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find classes with specific annotation."""
-    import subprocess
-
     root, _ = get_config()
 
     # Remove @ if present
     annotation = annotation.lstrip("@")
 
-    # Use grep to find files with annotation
-    try:
-        result = subprocess.run(
-            ["grep", "-rl", f"@{annotation}", "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        files = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    # Use run_search to find files with annotation
+    output = run_search(f"@{annotation}", root, files_only=True)
+    files = output.strip().split("\n") if output.strip() else []
 
     if not files:
         console.print(f"[yellow]No files with @{annotation} found[/yellow]")
@@ -618,23 +665,12 @@ def find_callers(
     limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
 ):
     """Find where a function is called."""
-    import subprocess
-
     root, _ = get_config()
 
     # Search for function calls: name( or .name(
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", f"[.>]{function_name}\\s*\\(|^\\s*{function_name}\\s*\\(",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    pattern = f"[.>]{function_name}\\s*\\(|^\\s*{function_name}\\s*\\("
+    output = run_search(pattern, root)
+    lines = output.strip().split("\n") if output.strip() else []
 
     # Filter out function definitions (fun name, def name, void name, etc.)
     calls = []
@@ -716,23 +752,10 @@ def find_provides(
     limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
 ):
     """Find @Provides/@Binds methods that provide a type."""
-    import subprocess
-
     root, _ = get_config()
 
     # Search with context around @Provides/@Binds to find the type
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", "-A5", "@Provides|@Binds",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = result.stdout
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Provides|@Binds", root, context_after=5)
 
     # Parse grep output and find blocks containing the type
     matches = []
@@ -786,22 +809,11 @@ def find_inject(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find where a type is injected (@Inject constructor/field)."""
-    import subprocess
-
     root, _ = get_config()
 
     # Search for @Inject with the type
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", f"@Inject", "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Inject", root)
+    lines = output.strip().split("\n") if output.strip() else []
 
     # Filter lines that mention the type
     matches = []
@@ -810,19 +822,10 @@ def find_inject(
             matches.append(line)
 
     # Also search for constructor injection pattern: class Foo @Inject constructor(type: Type)
-    try:
-        result2 = subprocess.run(
-            ["grep", "-rn", f"constructor.*{type_name}", "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        for line in result2.stdout.strip().split("\n"):
-            if line and "@Inject" not in line and line not in matches:
-                # Check if file has @Inject constructor
-                matches.append(line)
-    except Exception:
-        pass
+    output2 = run_search(f"constructor.*{type_name}", root, file_types=["*.kt"])
+    for line in output2.strip().split("\n"):
+        if line and "@Inject" not in line and line not in matches:
+            matches.append(line)
 
     if not matches:
         console.print(f"[yellow]No injection points found for '{type_name}'[/yellow]")
@@ -845,22 +848,11 @@ def find_todos(
     limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
 ):
     """Find TODO/FIXME/HACK comments in code."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", f"//.*({pattern})|#.*({pattern})",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    search_pattern = f"//.*({pattern})|#.*({pattern})"
+    output = run_search(search_pattern, root)
+    lines = output.strip().split("\n") if output.strip() else []
 
     if not lines:
         console.print(f"[yellow]No {pattern} comments found[/yellow]")
@@ -900,22 +892,9 @@ def find_deprecated(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find @Deprecated classes and functions."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-A1", "@Deprecated",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = result.stdout
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Deprecated", root, context_after=1)
 
     # Parse blocks
     matches = []
@@ -954,22 +933,10 @@ def find_suppress(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find @Suppress annotations (audit suppressed warnings)."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "@Suppress",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Suppress", root)
+    lines = output.strip().split("\n") if output.strip() else []
 
     # Filter by warning if specified
     if warning:
@@ -1012,23 +979,12 @@ def find_extensions(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find extension functions for a type."""
-    import subprocess
-
     root, _ = get_config()
 
     # Pattern: fun Type.functionName or fun Type?.functionName
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", f"fun\\s+{receiver_type}\\??\\.",
-             "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    pattern = f"fun\\s+{receiver_type}\\??\\."
+    output = run_search(pattern, root, file_types=["*.kt"])
+    lines = output.strip().split("\n") if output.strip() else []
 
     if not lines:
         console.print(f"[yellow]No extension functions found for '{receiver_type}'[/yellow]")
@@ -1116,38 +1072,17 @@ def find_deeplinks(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find deeplinks and intent-filters in AndroidManifest files."""
-    import subprocess
-
     root, _ = get_config()
 
     # Search in AndroidManifest.xml files
-    try:
-        # Find scheme, host, pathPrefix in intent-filter
-        result = subprocess.run(
-            ["grep", "-rn", "-E", "android:(scheme|host|path|pathPrefix|pathPattern)=",
-             "--include=AndroidManifest.xml", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output1 = run_search("android:(scheme|host|path|pathPrefix|pathPattern)=", root,
+                         file_types=["AndroidManifest.xml"])
+    lines = output1.strip().split("\n") if output1.strip() else []
 
     # Also search for @DeepLink annotations
-    try:
-        result2 = subprocess.run(
-            ["grep", "-rn", "-E", "@DeepLink|@DeepLinkHandler",
-             "--include=*.kt", "--include=*.java", root],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result2.stdout.strip():
-            lines.extend(result2.stdout.strip().split("\n"))
-    except Exception:
-        pass
+    output2 = run_search("@DeepLink|@DeepLinkHandler", root)
+    if output2.strip():
+        lines.extend(output2.strip().split("\n"))
 
     if query:
         lines = [l for l in lines if query.lower() in l.lower()]
@@ -1185,22 +1120,9 @@ def find_composables(
     limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
 ):
     """Find @Composable functions."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-A1", "@Composable",
-             "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = result.stdout
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Composable", root, context_after=1, file_types=["*.kt"])
 
     # Parse to extract function names
     composables = []
@@ -1244,22 +1166,9 @@ def find_previews(
     limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
 ):
     """Find @Preview functions (Compose previews)."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-B1", "-A1", "@Preview",
-             "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = result.stdout
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search("@Preview", root, context_before=1, context_after=1, file_types=["*.kt"])
 
     # Parse to extract preview info
     previews = []
@@ -1308,22 +1217,10 @@ def find_suspend(
     limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
 ):
     """Find suspend functions."""
-    import subprocess
-
     root, _ = get_config()
 
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", "suspend\\s+fun\\s+",
-             "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    output = run_search(r"suspend\s+fun\s+", root, file_types=["*.kt"])
+    lines = output.strip().split("\n") if output.strip() else []
 
     # Parse and extract function names
     suspends = []
@@ -1359,23 +1256,12 @@ def find_flows(
     limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
 ):
     """Find Flow, StateFlow, SharedFlow usage."""
-    import subprocess
-
     root, _ = get_config()
 
     # Search for Flow types
-    try:
-        result = subprocess.run(
-            ["grep", "-rn", "-E", "(Flow<|StateFlow<|SharedFlow<|MutableStateFlow|MutableSharedFlow|flowOf|asFlow|channelFlow)",
-             "--include=*.kt", root],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-    except Exception as e:
-        console.print(f"[red]Error searching: {e}[/red]")
-        return
+    pattern = r"(Flow<|StateFlow<|SharedFlow<|MutableStateFlow|MutableSharedFlow|flowOf|asFlow|channelFlow)"
+    output = run_search(pattern, root, file_types=["*.kt"])
+    lines = output.strip().split("\n") if output.strip() else []
 
     # Filter by query if provided
     if query:
