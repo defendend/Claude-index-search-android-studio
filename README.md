@@ -33,6 +33,8 @@ pip install -r requirements.txt
 
 ### 3. Регистрация MCP
 
+#### Вариант A: Claude Code (проектный `.mcp.json`)
+
 Создайте `.mcp.json` в корне проекта:
 
 ```json
@@ -43,6 +45,24 @@ pip install -r requirements.txt
       "command": "sh",
       "args": ["/path/to/project/.claude/mcp-index/mcp_server.sh"],
       "env": {}
+    }
+  }
+}
+```
+
+#### Вариант B: Claude Desktop (глобальный конфиг)
+
+Добавьте в `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) или `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "kotlin-index": {
+      "command": "/path/to/project/.claude/mcp-index/.venv/bin/python",
+      "args": ["/path/to/project/.claude/mcp-index/server.py"],
+      "env": {
+        "KOTLIN_INDEX_PROJECT_ROOT": "/path/to/project"
+      }
     }
   }
 }
