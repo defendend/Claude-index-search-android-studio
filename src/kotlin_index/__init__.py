@@ -7,4 +7,4 @@ Provides:
 - SQLite + FTS5 for fast search
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"

@@ -69,6 +69,10 @@ kotlin-index usages "UserRepository"
 | `kotlin-index annotations <name>` | Find classes with annotation (@Module, @Inject) |
 | `kotlin-index changed` | Show symbols in changed files (git diff) |
 | `kotlin-index outline <file>` | Show file structure |
+| `kotlin-index callers <function>` | Find where a function is called |
+| `kotlin-index imports <file>` | Show imports of a file |
+| `kotlin-index provides <type>` | Find @Provides/@Binds for a type |
+| `kotlin-index inject <type>` | Find @Inject points for a type |
 
 ### Module Commands
 
@@ -254,6 +258,12 @@ Check file filter in `module_indexer.py`.
 Check tree-sitter node types in `symbol_indexer.py`.
 
 ## Changelog
+
+### v2.3.0
+- Add `callers` command: find where a function is called (uses references index)
+- Add `imports` command: show imports of a file
+- Add `provides` command: find @Provides/@Binds methods that provide a type (Dagger DI)
+- Add `inject` command: find where a type is injected (@Inject constructor/field)
 
 ### v2.2.0
 - Add `hierarchy` command: show class hierarchy (parents and children)

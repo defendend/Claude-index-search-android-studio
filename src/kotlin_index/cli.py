@@ -4,6 +4,7 @@ CLI for kotlin-index - fast code search for Android/Kotlin/Java projects.
 """
 
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -598,6 +599,210 @@ def show_changed(
             console.print(f"\n  [cyan]{rel_path}:[/cyan]")
             for s in file_symbols:
                 console.print(f"    [{s['type']}] {s['name']} (line {s['line']})")
+
+
+@app.command("callers")
+def find_callers(
+    function_name: str = typer.Argument(..., help="Function name"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
+):
+    """Find where a function is called (uses references index)."""
+    db = get_db()
+    refs = db.get_references(function_name, limit)
+    db.close()
+
+    if not refs:
+        console.print(f"[yellow]No callers found for '{function_name}'[/yellow]")
+        return
+
+    # Filter to call contexts
+    calls = [r for r in refs if r.get("context") in ("call", "reference", None)]
+
+    console.print(f"[bold]Callers of '{function_name}' ({len(calls)}):[/bold]")
+
+    by_file = {}
+    for ref in calls:
+        path = ref["file_path"]
+        if path not in by_file:
+            by_file[path] = []
+        by_file[path].append(ref)
+
+    for path, file_refs in sorted(by_file.items()):
+        console.print(f"\n  [cyan]{path}:[/cyan]")
+        for ref in file_refs:
+            console.print(f"    line {ref['line']}")
+
+
+@app.command("imports")
+def show_imports(
+    file_path: str = typer.Argument(..., help="Path to file"),
+):
+    """Show imports of a file."""
+    from pathlib import Path
+
+    root, _ = get_config()
+
+    # Handle relative paths
+    if not file_path.startswith("/"):
+        file_path = str(Path(root) / file_path)
+
+    path = Path(file_path)
+    if not path.exists():
+        console.print(f"[red]File not found: {file_path}[/red]")
+        return
+
+    try:
+        content = path.read_text()
+    except Exception as e:
+        console.print(f"[red]Error reading file: {e}[/red]")
+        return
+
+    imports = []
+    for line in content.split("\n"):
+        line = line.strip()
+        if line.startswith("import "):
+            imports.append(line[7:].rstrip(";"))
+        elif line.startswith("package ") or (line and not line.startswith("//") and not line.startswith("/*") and "import " not in line and imports):
+            # Stop after imports section
+            if imports:
+                break
+
+    if not imports:
+        console.print(f"[yellow]No imports found in {path.name}[/yellow]")
+        return
+
+    console.print(f"[bold]Imports in {path.name} ({len(imports)}):[/bold]")
+    for imp in sorted(imports):
+        console.print(f"  {imp}")
+
+
+@app.command("provides")
+def find_provides(
+    type_name: str = typer.Argument(..., help="Type name to find provider for"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
+):
+    """Find @Provides/@Binds methods that provide a type."""
+    import subprocess
+
+    root, _ = get_config()
+
+    # Search with context around @Provides/@Binds to find the type
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-E", "-A5", "@Provides|@Binds",
+             "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = result.stdout
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Parse grep output and find blocks containing the type
+    matches = []
+    current_block = []
+    current_file_line = ""
+
+    for line in output.split("\n"):
+        if line.startswith("--"):
+            # Block separator - check if block contains type
+            if current_block and type_name in "\n".join(current_block):
+                matches.append((current_file_line, current_block))
+            current_block = []
+            current_file_line = ""
+            continue
+
+        if "@Provides" in line or "@Binds" in line:
+            # Start of new provider
+            if current_block and type_name in "\n".join(current_block):
+                matches.append((current_file_line, current_block))
+            current_block = [line]
+            current_file_line = line
+        elif current_block:
+            current_block.append(line)
+
+    # Don't forget last block
+    if current_block and type_name in "\n".join(current_block):
+        matches.append((current_file_line, current_block))
+
+    if not matches:
+        console.print(f"[yellow]No @Provides/@Binds found for '{type_name}'[/yellow]")
+        return
+
+    console.print(f"[bold]Providers for '{type_name}' ({len(matches[:limit])}):[/bold]")
+    for file_line, block in matches[:limit]:
+        parts = file_line.split(":", 2)
+        if len(parts) >= 2:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            # Find the line with the type (grep uses - for context lines, : for match lines)
+            type_line = next((l for l in block if type_name in l), block[0])
+            # Extract content after file:line: or file-line- pattern
+            match = re.search(r'^[^:]+[:\-]\d+[:\-](.*)$', type_line)
+            content = match.group(1).strip()[:80] if match else type_line.strip()[:80]
+            console.print(f"  {file_path}:{line_num}")
+            console.print(f"    {content}")
+
+
+@app.command("inject")
+def find_inject(
+    type_name: str = typer.Argument(..., help="Type name to find injection points"),
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find where a type is injected (@Inject constructor/field)."""
+    import subprocess
+
+    root, _ = get_config()
+
+    # Search for @Inject with the type
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", f"@Inject", "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Filter lines that mention the type
+    matches = []
+    for line in lines:
+        if type_name in line:
+            matches.append(line)
+
+    # Also search for constructor injection pattern: class Foo @Inject constructor(type: Type)
+    try:
+        result2 = subprocess.run(
+            ["grep", "-rn", f"constructor.*{type_name}", "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        for line in result2.stdout.strip().split("\n"):
+            if line and "@Inject" not in line and line not in matches:
+                # Check if file has @Inject constructor
+                matches.append(line)
+    except Exception:
+        pass
+
+    if not matches:
+        console.print(f"[yellow]No injection points found for '{type_name}'[/yellow]")
+        return
+
+    console.print(f"[bold]Injection points for '{type_name}' ({len(matches[:limit])}):[/bold]")
+    for match in matches[:limit]:
+        parts = match.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()[:80]
+            console.print(f"  {file_path}:{line_num}")
+            console.print(f"    {content}")
 
 
 @app.command("mcp")
