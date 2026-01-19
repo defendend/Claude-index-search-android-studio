@@ -299,6 +299,94 @@ def rebuild_index(index_type: str = "all") -> str:
 
 
 @mcp.tool()
+def update_index() -> str:
+    """
+    Инкрементальное обновление индекса (только изменённые файлы).
+
+    Returns:
+        Статистика обновления
+    """
+    results = symbol_indexer.index_incremental()
+
+    db.set_meta("last_indexed", time.strftime("%Y-%m-%d %H:%M:%S"))
+    db.commit()
+
+    if results["files"] == 0:
+        return f"Нет изменённых файлов (пропущено: {results['skipped']})"
+
+    output = ["Инкрементальное обновление завершено:"]
+    output.append(f"  Обновлено файлов: {results['files']}")
+    output.append(f"  Пропущено: {results['skipped']}")
+    output.append(f"  Символов: {results['symbols']}")
+    output.append(f"  Наследований: {results['inheritance']}")
+    output.append(f"  Использований: {results['references']}")
+
+    return "\n".join(output)
+
+
+@mcp.tool()
+def find_usages(symbol_name: str, limit: int = 50) -> str:
+    """
+    Найти все использования символа в проекте.
+
+    Args:
+        symbol_name: Имя символа (класс, функция, переменная)
+        limit: Максимальное количество результатов
+
+    Returns:
+        Список мест использования символа
+    """
+    refs = db.get_references(symbol_name, limit)
+
+    if not refs:
+        return f"Использования '{symbol_name}' не найдены"
+
+    output = [f"Использования '{symbol_name}' ({len(refs)}):"]
+
+    # Группируем по файлам
+    by_file = {}
+    for ref in refs:
+        path = ref["file_path"]
+        if path not in by_file:
+            by_file[path] = []
+        by_file[path].append(ref)
+
+    for path, file_refs in sorted(by_file.items()):
+        output.append(f"\n  {path}:")
+        for ref in file_refs:
+            ctx = f" ({ref['context']})" if ref.get("context") else ""
+            output.append(f"    строка {ref['line']}{ctx}")
+
+    return "\n".join(output)
+
+
+@mcp.tool()
+def find_implementations(interface_name: str) -> str:
+    """
+    Найти все реализации интерфейса или наследники класса.
+
+    Args:
+        interface_name: Имя интерфейса или класса
+
+    Returns:
+        Список классов, реализующих интерфейс или наследующих класс
+    """
+    impls = db.get_implementations(interface_name)
+
+    if not impls:
+        return f"Реализации/наследники '{interface_name}' не найдены"
+
+    output = [f"Реализации/наследники '{interface_name}' ({len(impls)}):"]
+
+    for impl in impls:
+        rel = "implements" if impl["inheritance_type"] == "implements" else "extends"
+        output.append(f"  [{impl['type']}] {impl['name']} ({rel})")
+        output.append(f"    {impl['file_path']}:{impl['line']}")
+
+    return "\n".join(output)
+
+
+@mcp.tool()
 def get_index_stats() -> str:
     """
     Получить статистику индекса.
@@ -314,6 +402,8 @@ def get_index_stats() -> str:
         f"  Модулей: {stats['modules']}",
         f"  Символов: {stats['symbols']}",
         f"  Зависимостей: {stats['dependencies']}",
+        f"  Связей наследования: {stats['inheritance']}",
+        f"  Использований символов: {stats['references']}",
         f"  Последняя индексация: {stats['last_indexed'] or 'никогда'}",
     ]
 

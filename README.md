@@ -1,13 +1,17 @@
 # kotlin-index MCP Server
 
-MCP сервер для быстрого поиска по Android/Kotlin проектам. Индексирует файлы, символы (классы, функции, интерфейсы) и Gradle модули с зависимостями.
+MCP сервер для быстрого поиска по Android/Kotlin/Java проектам. Индексирует файлы, символы (классы, функции, интерфейсы) и Gradle модули с зависимостями.
 
 ## Возможности
 
 - **Поиск файлов** — по имени или части пути
 - **Поиск символов** — классы, интерфейсы, функции, свойства с фильтрацией по типу
+- **Find Usages** — поиск использований символа в проекте
+- **Find Implementations** — поиск реализаций интерфейса или наследников класса
 - **Структура файла** — outline с номерами строк
 - **Модули и зависимости** — парсинг build.gradle, граф зависимостей
+- **Kotlin + Java** — поддержка обоих языков через tree-sitter
+- **Инкрементальная индексация** — обновление только изменённых файлов
 - **Быстрый поиск** — SQLite + FTS5, миллисекунды на запрос
 
 ## Установка
@@ -75,6 +79,8 @@ find_file_exact("MainActivity.kt")  → полный путь
 | `find_symbol(query, symbol_type?, limit=20)` | Поиск по имени с фильтром типа |
 | `find_class(name)` | Найти класс/интерфейс |
 | `get_file_outline(file_path)` | Структура файла |
+| `find_usages(symbol_name, limit=50)` | Найти использования символа |
+| `find_implementations(interface_name)` | Найти реализации интерфейса/наследников |
 
 **Типы символов:**
 - `class` — классы
@@ -89,6 +95,8 @@ find_symbol("Presenter", "class")      → классы с "Presenter"
 find_symbol("onCreate", "function")    → функции onCreate
 find_class("MainViewModel")            → путь и строка
 get_file_outline("/path/to/File.kt")   → структура файла
+find_usages("UserRepository")          → где используется класс
+find_implementations("Repository")     → классы реализующие интерфейс
 ```
 
 ### Модули и зависимости
@@ -115,14 +123,20 @@ get_module_dependents("core.network.api") → dependents
 
 | Инструмент | Описание |
 |------------|----------|
-| `rebuild_index(type="all")` | Пересобрать индекс |
+| `rebuild_index(type="all")` | Пересобрать индекс полностью |
+| `update_index()` | Инкрементальное обновление (только изменённые файлы) |
 | `get_index_stats()` | Статистика |
 
-**Типы:**
+**Типы для rebuild_index:**
 - `files` — только файлы
 - `modules` — модули и зависимости
 - `symbols` — символы (классы, функции)
 - `all` — всё
+
+```
+rebuild_index("all")  → полная переиндексация
+update_index()        → быстрое обновление изменённых файлов
+```
 
 ## Первый запуск
 
@@ -134,9 +148,13 @@ rebuild_index("all")
 
 ## Когда обновлять
 
+Используйте `update_index()` для быстрого инкрементального обновления:
+- После редактирования файлов
 - После `git pull` / `git checkout`
-- После добавления новых файлов/модулей
-- После значительных изменений кода
+
+Используйте `rebuild_index("all")` для полной переиндексации:
+- После добавления/удаления множества файлов
+- При проблемах с индексом
 
 ## Конфигурация
 
@@ -158,14 +176,15 @@ mcp-index/
 └── indexer/
     ├── file_indexer.py    # Индексация файлов
     ├── module_indexer.py  # Парсинг build.gradle
-    └── symbol_indexer.py  # Парсинг Kotlin (tree-sitter)
+    └── symbol_indexer.py  # Парсинг Kotlin/Java (tree-sitter)
 ```
 
 ## Технологии
 
 - **FastMCP** — MCP фреймворк
 - **SQLite + FTS5** — полнотекстовый поиск
-- **tree-sitter-kotlin** — парсинг AST
+- **tree-sitter-kotlin** — парсинг Kotlin AST
+- **tree-sitter-java** — парсинг Java AST
 
 ## Производительность
 

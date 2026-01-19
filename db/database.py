@@ -256,6 +256,85 @@ class Database:
         row = self.execute("SELECT value FROM index_meta WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else None
 
+    # === Inheritance ===
+
+    def add_inheritance(self, symbol_id: int, parent_name: str, inheritance_type: str):
+        """Добавить связь наследования."""
+        self.execute("""
+            INSERT OR IGNORE INTO inheritance (symbol_id, parent_name, inheritance_type)
+            VALUES (?, ?, ?)
+        """, (symbol_id, parent_name, inheritance_type))
+
+    def get_implementations(self, parent_name: str) -> list[dict]:
+        """Найти все реализации/наследники интерфейса или класса."""
+        rows = self.execute("""
+            SELECT s.*, f.path as file_path, f.module, i.inheritance_type
+            FROM inheritance i
+            JOIN symbols s ON i.symbol_id = s.id
+            JOIN files f ON s.file_id = f.id
+            WHERE i.parent_name = ? OR i.parent_name LIKE ?
+            ORDER BY s.name
+        """, (parent_name, f"%.{parent_name}")).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_symbol_parents(self, symbol_id: int) -> list[dict]:
+        """Получить родителей символа (что наследует/реализует)."""
+        rows = self.execute("""
+            SELECT parent_name, inheritance_type FROM inheritance
+            WHERE symbol_id = ?
+        """, (symbol_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_inheritance_by_file(self, file_id: int):
+        """Удалить связи наследования для файла."""
+        self.execute("""
+            DELETE FROM inheritance WHERE symbol_id IN (
+                SELECT id FROM symbols WHERE file_id = ?
+            )
+        """, (file_id,))
+
+    def clear_inheritance(self):
+        """Очистить таблицу наследования."""
+        self.execute("DELETE FROM inheritance")
+
+    # === Symbol References ===
+
+    def add_reference(self, symbol_name: str, file_id: int, line: int, context: str = None):
+        """Добавить использование символа."""
+        self.execute("""
+            INSERT INTO symbol_references (symbol_name, file_id, line, context)
+            VALUES (?, ?, ?, ?)
+        """, (symbol_name, file_id, line, context))
+
+    def get_references(self, symbol_name: str, limit: int = 100) -> list[dict]:
+        """Найти все использования символа."""
+        rows = self.execute("""
+            SELECT sr.*, f.path as file_path, f.module
+            FROM symbol_references sr
+            JOIN files f ON sr.file_id = f.id
+            WHERE sr.symbol_name = ?
+            ORDER BY f.path, sr.line
+            LIMIT ?
+        """, (symbol_name, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_references_by_file(self, file_id: int):
+        """Удалить использования символов в файле."""
+        self.execute("DELETE FROM symbol_references WHERE file_id = ?", (file_id,))
+
+    def clear_references(self):
+        """Очистить таблицу использований."""
+        self.execute("DELETE FROM symbol_references")
+
+    # === Files with modification check ===
+
+    def get_modified_files(self) -> list[dict]:
+        """Получить файлы, которые изменились с момента последней индексации."""
+        rows = self.execute("""
+            SELECT * FROM files WHERE modified_at > indexed_at
+        """).fetchall()
+        return [dict(row) for row in rows]
+
     # === Stats ===
 
     def get_stats(self) -> dict:
@@ -265,6 +344,10 @@ class Database:
         symbols_count = self.execute("SELECT COUNT(*) as cnt FROM symbols").fetchone()["cnt"]
         deps_count = self.execute("SELECT COUNT(*) as cnt FROM module_deps").fetchone()["cnt"]
 
+        # Новые счётчики
+        inheritance_count = self.execute("SELECT COUNT(*) as cnt FROM inheritance").fetchone()["cnt"]
+        refs_count = self.execute("SELECT COUNT(*) as cnt FROM symbol_references").fetchone()["cnt"]
+
         last_indexed = self.get_meta("last_indexed")
 
         return {
@@ -272,5 +355,7 @@ class Database:
             "modules": modules_count,
             "symbols": symbols_count,
             "dependencies": deps_count,
+            "inheritance": inheritance_count,
+            "references": refs_count,
             "last_indexed": last_indexed,
         }

@@ -56,6 +56,32 @@ CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_symbols_type ON symbols(type);
 CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
 
+-- Наследование и реализация интерфейсов
+CREATE TABLE IF NOT EXISTS inheritance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol_id INTEGER NOT NULL,           -- класс/интерфейс который наследует/реализует
+    parent_name TEXT NOT NULL,            -- имя родительского класса/интерфейса
+    inheritance_type TEXT NOT NULL,       -- extends, implements
+    FOREIGN KEY (symbol_id) REFERENCES symbols(id),
+    UNIQUE(symbol_id, parent_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inheritance_symbol ON inheritance(symbol_id);
+CREATE INDEX IF NOT EXISTS idx_inheritance_parent ON inheritance(parent_name);
+
+-- Использования символов (references)
+CREATE TABLE IF NOT EXISTS symbol_references (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol_name TEXT NOT NULL,            -- имя используемого символа
+    file_id INTEGER NOT NULL,             -- файл где используется
+    line INTEGER NOT NULL,                -- строка использования
+    context TEXT,                         -- контекст (вызов, присваивание и т.д.)
+    FOREIGN KEY (file_id) REFERENCES files(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refs_symbol ON symbol_references(symbol_name);
+CREATE INDEX IF NOT EXISTS idx_refs_file ON symbol_references(file_id);
+
 -- Полнотекстовый поиск по именам
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, module);
 CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(name, signature);
