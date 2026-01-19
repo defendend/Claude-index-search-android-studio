@@ -73,6 +73,12 @@ kotlin-index usages "UserRepository"
 | `kotlin-index imports <file>` | Show imports of a file |
 | `kotlin-index provides <type>` | Find @Provides/@Binds for a type |
 | `kotlin-index inject <type>` | Find @Inject points for a type |
+| `kotlin-index todo` | Find TODO/FIXME/HACK comments |
+| `kotlin-index deprecated` | Find @Deprecated items |
+| `kotlin-index suppress [warning]` | Find @Suppress annotations |
+| `kotlin-index extensions <type>` | Find extension functions for a type |
+| `kotlin-index api <module>` | Show public API of a module |
+| `kotlin-index deeplinks [query]` | Find deeplinks in AndroidManifest |
 
 ### Module Commands
 
@@ -258,6 +264,14 @@ Check file filter in `module_indexer.py`.
 Check tree-sitter node types in `symbol_indexer.py`.
 
 ## Changelog
+
+### v2.4.0
+- Add `todo` command: find TODO/FIXME/HACK comments with grouping
+- Add `deprecated` command: find @Deprecated classes and functions
+- Add `suppress` command: audit @Suppress annotations, grouped by warning type
+- Add `extensions` command: find extension functions for a type
+- Add `api` command: show public API of a module (classes, functions)
+- Add `deeplinks` command: find deeplinks in AndroidManifest and @DeepLink annotations
 
 ### v2.3.0
 - Add `callers` command: find where a function is called (uses references index)

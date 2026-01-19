@@ -805,6 +805,343 @@ def find_inject(
             console.print(f"    {content}")
 
 
+@app.command("todo")
+def find_todos(
+    pattern: str = typer.Argument("TODO|FIXME|HACK", help="Pattern to search (regex)"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max results"),
+):
+    """Find TODO/FIXME/HACK comments in code."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-E", f"//.*({pattern})|#.*({pattern})",
+             "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    if not lines:
+        console.print(f"[yellow]No {pattern} comments found[/yellow]")
+        return
+
+    # Group by type
+    todos = {"TODO": [], "FIXME": [], "HACK": [], "OTHER": []}
+    for line in lines[:limit]:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()[:80]
+
+            if "TODO" in content.upper():
+                todos["TODO"].append((file_path, line_num, content))
+            elif "FIXME" in content.upper():
+                todos["FIXME"].append((file_path, line_num, content))
+            elif "HACK" in content.upper():
+                todos["HACK"].append((file_path, line_num, content))
+            else:
+                todos["OTHER"].append((file_path, line_num, content))
+
+    total = sum(len(v) for v in todos.values())
+    console.print(f"[bold]Found {total} comments:[/bold]")
+
+    for category, items in todos.items():
+        if items:
+            console.print(f"\n[cyan]{category} ({len(items)}):[/cyan]")
+            for file_path, line_num, content in items[:20]:
+                console.print(f"  {file_path}:{line_num}")
+                console.print(f"    {content}")
+
+
+@app.command("deprecated")
+def find_deprecated(
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find @Deprecated classes and functions."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-A1", "@Deprecated",
+             "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = result.stdout
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Parse blocks
+    matches = []
+    lines = output.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if "@Deprecated" in line and not line.startswith("--"):
+            parts = line.split(":", 2)
+            if len(parts) >= 2:
+                file_path = parts[0].replace(root + "/", "")
+                line_num = parts[1]
+                # Get next line for context
+                next_line = ""
+                if i + 1 < len(lines) and not lines[i + 1].startswith("--"):
+                    next_parts = lines[i + 1].split(":", 2)
+                    if len(next_parts) >= 3:
+                        next_line = next_parts[2].strip()[:60]
+                matches.append((file_path, line_num, next_line))
+        i += 1
+
+    if not matches:
+        console.print("[yellow]No @Deprecated found[/yellow]")
+        return
+
+    console.print(f"[bold]Deprecated items ({len(matches[:limit])}):[/bold]")
+    for file_path, line_num, context in matches[:limit]:
+        console.print(f"  {file_path}:{line_num}")
+        if context:
+            console.print(f"    {context}")
+
+
+@app.command("suppress")
+def find_suppress(
+    warning: Optional[str] = typer.Argument(None, help="Warning name to filter (e.g., UNCHECKED_CAST)"),
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find @Suppress annotations (audit suppressed warnings)."""
+    import subprocess
+
+    root, _ = get_config()
+
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "@Suppress",
+             "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Filter by warning if specified
+    if warning:
+        lines = [l for l in lines if warning.upper() in l.upper()]
+
+    if not lines:
+        msg = f" for '{warning}'" if warning else ""
+        console.print(f"[yellow]No @Suppress found{msg}[/yellow]")
+        return
+
+    # Group by warning type
+    by_type = {}
+    for line in lines[:limit * 2]:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()
+
+            # Extract warning names from @Suppress("...")
+            import re
+            warnings = re.findall(r'"([^"]+)"', content)
+            for w in warnings:
+                if w not in by_type:
+                    by_type[w] = []
+                by_type[w].append((file_path, line_num))
+
+    console.print(f"[bold]Suppressed warnings ({len(lines[:limit])}):[/bold]")
+    for warn_type, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        console.print(f"\n[cyan]{warn_type} ({len(items)}):[/cyan]")
+        for file_path, line_num in items[:10]:
+            console.print(f"  {file_path}:{line_num}")
+        if len(items) > 10:
+            console.print(f"  ... and {len(items) - 10} more")
+
+
+@app.command("extensions")
+def find_extensions(
+    receiver_type: str = typer.Argument(..., help="Receiver type (e.g., String, View, Context)"),
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find extension functions for a type."""
+    import subprocess
+
+    root, _ = get_config()
+
+    # Pattern: fun Type.functionName or fun Type?.functionName
+    try:
+        result = subprocess.run(
+            ["grep", "-rn", "-E", f"fun\\s+{receiver_type}\\??\\.",
+             "--include=*.kt", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    if not lines:
+        console.print(f"[yellow]No extension functions found for '{receiver_type}'[/yellow]")
+        return
+
+    console.print(f"[bold]Extension functions for '{receiver_type}' ({len(lines[:limit])}):[/bold]")
+    for line in lines[:limit]:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()[:80]
+            # Extract function name
+            match = re.search(rf'{receiver_type}\??\.([\w]+)', content)
+            func_name = match.group(1) if match else "?"
+            console.print(f"  [cyan]{func_name}[/cyan]: {file_path}:{line_num}")
+            console.print(f"    {content}")
+
+
+@app.command("api")
+def show_api(
+    module_path: str = typer.Argument(..., help="Module path (e.g., features/payments/api)"),
+):
+    """Show public API of a module (public classes and functions)."""
+    from pathlib import Path
+
+    root, _ = get_config()
+    module_dir = Path(root) / module_path
+
+    if not module_dir.exists():
+        console.print(f"[red]Module not found: {module_path}[/red]")
+        return
+
+    # Find all Kotlin/Java files in src/main
+    src_dir = module_dir / "src" / "main"
+    if not src_dir.exists():
+        src_dir = module_dir  # Try module root
+
+    files = list(src_dir.rglob("*.kt")) + list(src_dir.rglob("*.java"))
+
+    if not files:
+        console.print(f"[yellow]No source files found in {module_path}[/yellow]")
+        return
+
+    # Get symbols from index
+    db = get_db()
+    file_paths = [str(f) for f in files]
+    symbols = db.get_symbols_by_paths(file_paths)
+    db.close()
+
+    # Filter to public API (top-level classes, interfaces, functions)
+    api_symbols = [s for s in symbols if s.get("parent_symbol_id") is None]
+
+    # Group by type
+    classes = [s for s in api_symbols if s["type"] in ("class", "interface", "object", "enum")]
+    functions = [s for s in api_symbols if s["type"] == "function"]
+
+    console.print(f"[bold]Public API of {module_path}:[/bold]")
+
+    if classes:
+        console.print(f"\n[cyan]Classes/Interfaces ({len(classes)}):[/cyan]")
+        for s in sorted(classes, key=lambda x: x["name"]):
+            console.print(f"  [{s['type']}] {s['name']}")
+            rel_path = s['file_path'].replace(root + "/", "")
+            console.print(f"    {rel_path}:{s['line']}")
+
+    if functions:
+        console.print(f"\n[cyan]Top-level Functions ({len(functions)}):[/cyan]")
+        for s in sorted(functions, key=lambda x: x["name"]):
+            sig = f" {s['signature']}" if s.get('signature') else ""
+            console.print(f"  {s['name']}{sig}")
+            rel_path = s['file_path'].replace(root + "/", "")
+            console.print(f"    {rel_path}:{s['line']}")
+
+    if not classes and not functions:
+        console.print("[yellow]No public API symbols found[/yellow]")
+
+
+@app.command("deeplinks")
+def find_deeplinks(
+    query: Optional[str] = typer.Argument(None, help="Filter deeplinks by pattern"),
+    limit: int = typer.Option(30, "--limit", "-l", help="Max results"),
+):
+    """Find deeplinks and intent-filters in AndroidManifest files."""
+    import subprocess
+
+    root, _ = get_config()
+
+    # Search in AndroidManifest.xml files
+    try:
+        # Find scheme, host, pathPrefix in intent-filter
+        result = subprocess.run(
+            ["grep", "-rn", "-E", "android:(scheme|host|path|pathPrefix|pathPattern)=",
+             "--include=AndroidManifest.xml", root],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    except Exception as e:
+        console.print(f"[red]Error searching: {e}[/red]")
+        return
+
+    # Also search for @DeepLink annotations
+    try:
+        result2 = subprocess.run(
+            ["grep", "-rn", "-E", "@DeepLink|@DeepLinkHandler",
+             "--include=*.kt", "--include=*.java", root],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result2.stdout.strip():
+            lines.extend(result2.stdout.strip().split("\n"))
+    except Exception:
+        pass
+
+    if query:
+        lines = [l for l in lines if query.lower() in l.lower()]
+
+    if not lines:
+        msg = f" matching '{query}'" if query else ""
+        console.print(f"[yellow]No deeplinks found{msg}[/yellow]")
+        return
+
+    # Parse and group by manifest/file
+    by_file = {}
+    for line in lines[:limit]:
+        parts = line.split(":", 2)
+        if len(parts) >= 3:
+            file_path = parts[0].replace(root + "/", "")
+            line_num = parts[1]
+            content = parts[2].strip()
+
+            if file_path not in by_file:
+                by_file[file_path] = []
+            by_file[file_path].append((line_num, content))
+
+    console.print(f"[bold]Deeplinks ({len(lines[:limit])}):[/bold]")
+    for file_path, items in sorted(by_file.items()):
+        console.print(f"\n[cyan]{file_path}:[/cyan]")
+        for line_num, content in items:
+            # Clean up XML content
+            content = content.strip()[:70]
+            console.print(f"  :{line_num} {content}")
+
+
 @app.command("mcp")
 def run_mcp():
     """Start MCP server (requires kotlin-index[mcp])."""
