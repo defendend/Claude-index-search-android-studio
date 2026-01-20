@@ -465,7 +465,7 @@ fn main() -> Result<()> {
         Commands::PerlTests { query, limit } => commands::perl::cmd_perl_tests(&root, query.as_deref(), limit),
         Commands::PerlImports { query, limit } => commands::perl::cmd_perl_imports(&root, query.as_deref(), limit),
         Commands::Version => {
-            println!("ast-index-rs v{}", env!("CARGO_PKG_VERSION"));
+            println!("ast-index v{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
     }

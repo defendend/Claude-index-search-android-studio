@@ -269,15 +269,24 @@ fn parse_file(root: &Path, file_path: &Path) -> Result<ParsedFile> {
     // Detect file type by extension
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let is_swift = ext == "swift";
-    let is_objc = ext == "m" || ext == "h";
+    let is_objc = ext == "m";  // .h files now handled separately for C++ vs ObjC
     let is_perl = ext == "pm" || ext == "pl" || ext == "t";
+    let is_proto = ext == "proto";
+    let is_wsdl = ext == "wsdl" || ext == "xsd";
+    let is_cpp = ext == "cpp" || ext == "cc" || ext == "c" || ext == "hpp" || ext == "h";
 
     let (symbols, refs) = if is_objc {
-        parsers::parse_symbols_and_refs(&content, false, true, false)?
+        parsers::parse_symbols_and_refs(&content, false, true, false, false, false, false)?
     } else if is_perl {
-        parsers::parse_symbols_and_refs(&content, false, false, true)?
+        parsers::parse_symbols_and_refs(&content, false, false, true, false, false, false)?
+    } else if is_proto {
+        parsers::parse_symbols_and_refs(&content, false, false, false, true, false, false)?
+    } else if is_wsdl {
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, true, false)?
+    } else if is_cpp {
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, false, true)?
     } else {
-        parsers::parse_symbols_and_refs(&content, is_swift, false, false)?
+        parsers::parse_symbols_and_refs(&content, is_swift, false, false, false, false, false)?
     };
 
     Ok(ParsedFile {
