@@ -214,27 +214,107 @@ refs (id, file_id, name, line, context)
 
 ## Changelog
 
-### 3.0.0
+### 3.0.0 (Rust)
 - **Major release** — complete Rust rewrite, replacing Python version
 - 26 of 33 commands faster than Python
 - Top speedups: imports (260x), dependents (100x), deps/class (90x)
 - Full index with 900K+ references
 - Fixed `hierarchy` multiline class declarations
 - Fixed `provides` Java support and suffix matching
-- Removed all project-specific references
 
-### 0.2.0
-- Added references indexing (refs table)
-- `usages` command uses index (~8ms vs 1.4s grep)
-- Optimized grep commands with memory-mapped files
-- crossbeam-channel for faster concurrency
+### Python versions (1.0.0 - 2.5.2)
 
-### 0.1.0
-- Initial release
-- 31 commands
-- FTS5 index for symbols
-- Module dependency tracking
-- Incremental updates
+> Legacy Python code archived in `legacy-python-mcp/` folder
+
+#### 2.5.2
+- Project-specific databases: Each project now has its own index database
+
+#### 2.5.1
+- Use ripgrep for 10-15x faster grep-based searches
+
+#### 2.5.0
+- Add `composables`, `previews`, `suspend`, `flows` commands
+
+#### 2.4.1
+- Fix `callers`, `outline`, `api` commands
+
+#### 2.4.0
+- Add `todo`, `deprecated`, `suppress`, `extensions`, `api`, `deeplinks` commands
+
+#### 2.3.0
+- Add `callers`, `imports`, `provides`, `inject` commands
+
+#### 2.2.0
+- Add `hierarchy`, `annotations`, `changed` commands
+
+#### 2.1.0
+- Fix `class` command, add `update` command
+
+#### 2.0.0
+- pip package, CLI with typer + rich, Skill for Claude Code, MCP server
+
+#### 1.2.0
+- Java support (tree-sitter-java), Find Usages, Find Implementations
+
+#### 1.1.0
+- Incremental indexing, better module detection
+
+#### 1.0.0
+- Initial release: File/symbol/module search, MCP server
+
+## Claude Code Plugin
+
+### Install Plugin
+
+Add marketplace and install plugin:
+```bash
+# In Claude Code
+/plugins add https://github.com/defendend/Claude-index-search-android-studio
+/plugins install kotlin-index
+```
+
+Or manually:
+1. Add to `~/.claude/plugins/known_marketplaces.json`:
+```json
+{
+  "kotlin-index-marketplace": {
+    "source": {
+      "source": "github",
+      "repo": "defendend/Claude-index-search-android-studio"
+    }
+  }
+}
+```
+
+2. Restart Claude Code and install plugin
+
+### Update Plugin
+
+```bash
+# Update CLI
+brew upgrade kotlin-index
+
+# Update plugin (in Claude Code)
+/plugins update kotlin-index
+```
+
+Or manually update:
+```bash
+# Pull latest marketplace
+cd ~/.claude/plugins/marketplaces/kotlin-index-marketplace
+git pull origin main
+
+# Update cache
+rm -rf ~/.claude/plugins/cache/kotlin-index-marketplace/kotlin-index/*
+mkdir -p ~/.claude/plugins/cache/kotlin-index-marketplace/kotlin-index/3.0.0
+cp -r skills .claude-plugin ~/.claude/plugins/cache/kotlin-index-marketplace/kotlin-index/3.0.0/
+```
+
+### Uninstall Plugin
+
+```bash
+/plugins uninstall kotlin-index
+```
 
 ## License
 

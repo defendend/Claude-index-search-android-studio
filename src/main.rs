@@ -216,6 +216,14 @@ enum Commands {
         /// Module name
         module: String,
     },
+    /// Find unused dependencies in a module
+    UnusedDeps {
+        /// Module name (e.g., features.payments.impl)
+        module: String,
+        /// Show details for each dependency
+        #[arg(long, short)]
+        verbose: bool,
+    },
     /// Find usages of a symbol
     Usages {
         /// Symbol name
@@ -284,6 +292,7 @@ fn main() -> Result<()> {
         Commands::Module { pattern, limit } => cmd_module(&root, &pattern, limit),
         Commands::Deps { module } => cmd_deps(&root, &module),
         Commands::Dependents { module } => cmd_dependents(&root, &module),
+        Commands::UnusedDeps { module, verbose } => cmd_unused_deps(&root, &module, verbose),
         Commands::Usages { symbol, limit } => cmd_usages(&root, &symbol, limit),
         Commands::Outline { file } => cmd_outline(&root, &file),
         Commands::Imports { file } => cmd_imports(&root, &file),
@@ -1540,6 +1549,227 @@ fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
 
     eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
+}
+
+fn cmd_unused_deps(root: &Path, module: &str, verbose: bool) -> Result<()> {
+    let start = Instant::now();
+
+    if !db::db_exists(root) {
+        println!("{}", "Index not found. Run 'kotlin-index rebuild --deps' first.".red());
+        return Ok(());
+    }
+
+    let conn = db::open_db(root)?;
+
+    // Check if module deps are indexed
+    let dep_count: i64 = conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
+    if dep_count == 0 {
+        println!("{}", "Module dependencies not indexed. Run 'kotlin-index rebuild --deps' first.".yellow());
+        return Ok(());
+    }
+
+    // Get module path
+    let module_path: Option<String> = conn.query_row(
+        "SELECT path FROM modules WHERE name = ?1",
+        params![module],
+        |row| row.get(0)
+    ).ok();
+
+    let module_path = match module_path {
+        Some(p) => p,
+        None => {
+            println!("{}", format!("Module '{}' not found in index.", module).red());
+            return Ok(());
+        }
+    };
+
+    // Get all dependencies
+    let deps = indexer::get_module_deps(&conn, module)?;
+
+    if deps.is_empty() {
+        println!("{}", format!("Module '{}' has no dependencies.", module).yellow());
+        return Ok(());
+    }
+
+    println!("{}", format!("Analyzing {} dependencies of '{}'...\n", deps.len(), module).bold());
+
+    let module_dir = root.join(&module_path);
+
+    let mut unused: Vec<(String, String, String)> = vec![];
+    let mut used: Vec<(String, String, String, usize)> = vec![];
+
+    for (dep_name, dep_path, dep_kind) in &deps {
+        // Get public symbols from dependency
+        let dep_symbols = get_module_public_symbols(&conn, root, dep_path)?;
+
+        if dep_symbols.is_empty() {
+            // Can't analyze - no symbols found
+            if verbose {
+                println!("  {} {} - no public symbols found", "?".yellow(), dep_name);
+            }
+            continue;
+        }
+
+        // Check how many symbols are used in the module
+        let mut usage_count = 0;
+        let mut used_symbols: Vec<String> = vec![];
+
+        for symbol in &dep_symbols {
+            // Check if symbol is used in module files
+            if is_symbol_used_in_module(root, &module_dir, symbol)? {
+                usage_count += 1;
+                if used_symbols.len() < 3 {
+                    used_symbols.push(symbol.clone());
+                }
+            }
+        }
+
+        if usage_count == 0 {
+            unused.push((dep_name.clone(), dep_path.clone(), dep_kind.clone()));
+        } else {
+            used.push((dep_name.clone(), dep_path.clone(), dep_kind.clone(), usage_count));
+        }
+
+        if verbose {
+            if usage_count == 0 {
+                println!("  {} {} - 0/{} symbols used", "✗".red(), dep_name, dep_symbols.len());
+            } else {
+                let symbols_str = if used_symbols.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", used_symbols.join(", "))
+                };
+                println!("  {} {} - {}/{} symbols used{}", "✓".green(), dep_name, usage_count, dep_symbols.len(), symbols_str);
+            }
+        }
+    }
+
+    // Summary
+    println!("\n{}", "=== Summary ===".bold());
+
+    if !unused.is_empty() {
+        println!("\n{} ({}):", "Potentially unused dependencies".red().bold(), unused.len());
+        for (name, path, kind) in &unused {
+            println!("  {} {} ({})", "⚠".yellow(), name, kind);
+            println!("    path: {}", path);
+        }
+    }
+
+    if !used.is_empty() && verbose {
+        println!("\n{} ({}):", "Used dependencies".green(), used.len());
+        for (name, _path, kind, count) in &used {
+            println!("  {} {} ({}) - {} symbols", "✓".green(), name, kind, count);
+        }
+    }
+
+    println!("\n{}", format!(
+        "Total: {} unused, {} used of {} dependencies",
+        unused.len(),
+        used.len(),
+        deps.len()
+    ).bold());
+
+    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
+    Ok(())
+}
+
+/// Get public symbols (classes, interfaces) from a module
+fn get_module_public_symbols(conn: &Connection, root: &Path, module_path: &str) -> Result<Vec<String>> {
+    let mut symbols = vec![];
+
+    // First try to get from index
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT s.name FROM symbols s
+         JOIN files f ON s.file_id = f.id
+         WHERE f.path LIKE ?1 AND s.kind IN ('class', 'interface', 'object')
+         LIMIT 100"
+    )?;
+
+    let pattern = format!("{}%", module_path);
+    let rows = stmt.query_map(params![pattern], |row| row.get::<_, String>(0))?;
+
+    for row in rows {
+        if let Ok(name) = row {
+            symbols.push(name);
+        }
+    }
+
+    // If no symbols in index, try to find by scanning files
+    if symbols.is_empty() {
+        let module_dir = root.join(module_path);
+        if module_dir.exists() {
+            let class_re = Regex::new(r"(?m)^\s*(?:public\s+)?(?:abstract\s+)?(?:data\s+)?(?:class|interface|object)\s+(\w+)")?;
+
+            for entry in walkdir::WalkDir::new(&module_dir)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path().extension()
+                        .map(|ext| ext == "kt" || ext == "java")
+                        .unwrap_or(false)
+                })
+            {
+                if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                    for caps in class_re.captures_iter(&content) {
+                        if let Some(name) = caps.get(1) {
+                            symbols.push(name.as_str().to_string());
+                        }
+                    }
+                }
+                if symbols.len() >= 100 {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(symbols)
+}
+
+/// Check if a symbol is used in the module directory
+fn is_symbol_used_in_module(root: &Path, module_dir: &Path, symbol: &str) -> Result<bool> {
+    if !module_dir.exists() {
+        return Ok(false);
+    }
+
+    // Simple grep for the symbol name in module files
+    let pattern = format!(r"\b{}\b", regex::escape(symbol));
+    let matcher = match RegexMatcher::new(&pattern) {
+        Ok(m) => m,
+        Err(_) => return Ok(false),
+    };
+
+    let mut found = false;
+
+    for entry in walkdir::WalkDir::new(module_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension()
+                .map(|ext| ext == "kt" || ext == "java")
+                .unwrap_or(false)
+        })
+    {
+        if found { break; }
+
+        let path = entry.path();
+        if let Ok(content) = std::fs::read_to_string(path) {
+            // Skip if file is in the same module as the symbol definition
+            // (we want usages, not definitions)
+            if content.contains(&format!("class {}", symbol))
+                || content.contains(&format!("interface {}", symbol))
+                || content.contains(&format!("object {}", symbol)) {
+                continue;
+            }
+
+            // Check for import or direct usage
+            if content.contains(symbol) {
+                found = true;
+            }
+        }
+    }
+
+    Ok(found)
 }
 
 fn cmd_usages(root: &Path, symbol: &str, limit: usize) -> Result<()> {
