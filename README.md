@@ -1,4 +1,4 @@
-# kotlin-index v3.0.0
+# kotlin-index v3.1.0
 
 Fast code search CLI for Android/Kotlin/Java projects. Native Rust implementation.
 
@@ -35,7 +35,7 @@ kotlin-index implementations Presenter
 kotlin-index usages Repository
 ```
 
-## Commands (33)
+## Commands (34)
 
 ### Grep-based (no index required)
 
@@ -74,12 +74,8 @@ kotlin-index usages <SYMBOL>          # Symbol usages (indexed, ~8ms)
 kotlin-index module <PATTERN>         # Find modules
 kotlin-index deps <MODULE>            # Module dependencies
 kotlin-index dependents <MODULE>      # Dependent modules
+kotlin-index unused-deps <MODULE>     # Find unused dependencies
 kotlin-index api <MODULE>             # Public API of module
-```
-
-**Note:** For deps/dependents, index dependencies first:
-```bash
-kotlin-index rebuild --deps
 ```
 
 ### File analysis
@@ -213,6 +209,10 @@ refs (id, file_id, name, line, context)
 ```
 
 ## Changelog
+
+### 3.1.0
+- Add `unused-deps` command — find unused module dependencies
+- Module dependencies now indexed by default (use `--no-deps` to skip)
 
 ### 3.0.0 (Rust)
 - **Major release** — complete Rust rewrite, replacing Python version

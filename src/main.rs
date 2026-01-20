@@ -139,9 +139,9 @@ enum Commands {
         /// Index type: files, symbols, modules, or all
         #[arg(long, default_value = "all")]
         r#type: String,
-        /// Also index module dependencies from build.gradle
+        /// Skip module dependencies indexing
         #[arg(long)]
-        deps: bool,
+        no_deps: bool,
     },
     /// Update index (incremental)
     Update,
@@ -280,7 +280,7 @@ fn main() -> Result<()> {
         Commands::Previews { query, limit } => cmd_previews(&root, query.as_deref(), limit),
         // Index commands
         Commands::Init => cmd_init(&root),
-        Commands::Rebuild { r#type, deps } => cmd_rebuild(&root, &r#type, deps),
+        Commands::Rebuild { r#type, no_deps } => cmd_rebuild(&root, &r#type, !no_deps),
         Commands::Update => cmd_update(&root),
         Commands::Stats => cmd_stats(&root),
         Commands::Search { query, limit } => cmd_search(&root, &query, limit),
@@ -1440,7 +1440,7 @@ fn cmd_deps(root: &Path, module: &str) -> Result<()> {
     if dep_count == 0 {
         println!(
             "{}",
-            "Module dependencies not indexed. Run 'kotlin-index rebuild --deps' to index them.".yellow()
+            "Module dependencies not indexed. Run 'kotlin-index rebuild' to index them.".yellow()
         );
         return Ok(());
     }
@@ -1505,7 +1505,7 @@ fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
     if dep_count == 0 {
         println!(
             "{}",
-            "Module dependencies not indexed. Run 'kotlin-index rebuild --deps' to index them.".yellow()
+            "Module dependencies not indexed. Run 'kotlin-index rebuild' to index them.".yellow()
         );
         return Ok(());
     }
@@ -1555,7 +1555,7 @@ fn cmd_unused_deps(root: &Path, module: &str, verbose: bool) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
-        println!("{}", "Index not found. Run 'kotlin-index rebuild --deps' first.".red());
+        println!("{}", "Index not found. Run 'kotlin-index rebuild' first.".red());
         return Ok(());
     }
 
