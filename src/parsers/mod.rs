@@ -7,13 +7,17 @@
 //! - Perl
 //! - Protocol Buffers (proto2/proto3)
 //! - WSDL/XSD (Web Services)
-//! - C/C++ (JNI bindings)
+//! - C/C++ (JNI bindings, uservices)
+//! - Python (backend services)
+//! - Go (backend services)
 
 pub mod cpp;
+pub mod go;
 pub mod kotlin;
 pub mod objc;
 pub mod perl;
 pub mod proto;
+pub mod python;
 pub mod swift;
 pub mod wsdl;
 
@@ -43,16 +47,18 @@ use regex::Regex;
 
 // Re-export parser functions
 pub use cpp::parse_cpp_symbols;
+pub use go::parse_go_symbols;
 pub use kotlin::{parse_kotlin_symbols, parse_parents};
 pub use objc::parse_objc_symbols;
 pub use perl::parse_perl_symbols;
 pub use proto::parse_proto_symbols;
+pub use python::parse_python_symbols;
 pub use swift::parse_swift_symbols;
 pub use wsdl::parse_wsdl_symbols;
 
 /// Check if file extension is supported for indexing
 pub fn is_supported_extension(ext: &str) -> bool {
-    matches!(ext, "kt" | "java" | "swift" | "m" | "h" | "pm" | "pl" | "t" | "proto" | "wsdl" | "xsd" | "cpp" | "cc" | "c" | "hpp")
+    matches!(ext, "kt" | "java" | "swift" | "m" | "h" | "pm" | "pl" | "t" | "proto" | "wsdl" | "xsd" | "cpp" | "cc" | "c" | "hpp" | "py" | "go")
 }
 
 /// Parse symbols and references from file content
@@ -64,6 +70,8 @@ pub fn parse_symbols_and_refs(
     is_proto: bool,
     is_wsdl: bool,
     is_cpp: bool,
+    is_python: bool,
+    is_go: bool,
 ) -> Result<(Vec<ParsedSymbol>, Vec<ParsedRef>)> {
     let symbols = if is_swift {
         parse_swift_symbols(content)?
@@ -77,6 +85,10 @@ pub fn parse_symbols_and_refs(
         parse_wsdl_symbols(content)?
     } else if is_cpp {
         parse_cpp_symbols(content)?
+    } else if is_python {
+        parse_python_symbols(content)?
+    } else if is_go {
+        parse_go_symbols(content)?
     } else {
         parse_kotlin_symbols(content)?
     };
