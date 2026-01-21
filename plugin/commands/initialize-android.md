@@ -38,10 +38,6 @@ Then create or merge into `.claude/settings.json`. If file doesn't exist, create
   "permissions": {
     "allow": [
       "Bash(ast-index *)"
-    ],
-    "deny": [
-      "Bash(find:*)",
-      "Bash(find *)"
     ]
   },
   "rules": [
@@ -123,7 +119,19 @@ ast-index stats      # Show index statistics
 ```
 ```
 
-### 4. Build the Index
+### 4. Copy Skill Documentation to Project
+
+Copy the ast-index skill documentation from the plugin to the project's `.claude/` directory so that project-level Claude has access to it:
+
+```bash
+mkdir -p .claude/skills/ast-index/references
+cp "${CLAUDE_PLUGIN_ROOT}/skills/ast-index/SKILL.md" .claude/skills/ast-index/
+cp "${CLAUDE_PLUGIN_ROOT}/skills/ast-index/references/"*.md .claude/skills/ast-index/references/
+```
+
+This ensures the ast-index documentation is available in the project context.
+
+### 5. Build the Index
 
 Run initial indexing:
 
@@ -134,7 +142,7 @@ ast-index rebuild
 
 Show progress and report statistics when done.
 
-### 5. Verify Setup
+### 6. Verify Setup
 
 Run a quick search to verify everything works:
 
@@ -148,5 +156,6 @@ ast-index search "Activity"
 After completion, inform user:
 - settings.json has been configured with ast-index rules
 - CLAUDE.md has been updated with ast-index reference
+- Skill documentation copied to .claude/skills/ast-index/
 - Index has been built with X files and Y symbols
 - Ready to use ast-index for code search

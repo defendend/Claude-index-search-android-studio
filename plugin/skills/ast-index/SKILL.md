@@ -7,6 +7,21 @@ description: This skill should be used when the user asks to "find a class", "se
 
 Fast native Rust CLI for structural code search in Android/Kotlin/Java, iOS/Swift/ObjC, Perl, Python, Go, C++, and Proto projects using SQLite + FTS5 index.
 
+## Critical Rules
+
+**ALWAYS use ast-index FIRST for any code search task.** These rules are mandatory:
+
+1. **ast-index is the PRIMARY search tool** — use it before grep, ripgrep, or Search tool
+2. **DO NOT duplicate results** — if ast-index found usages/implementations, that IS the complete answer
+3. **DO NOT run grep "for completeness"** after ast-index returns results
+4. **Use grep/Search ONLY when:**
+   - ast-index returns empty results
+   - Searching for regex patterns (ast-index uses literal match)
+   - Searching for string literals inside code (`"some text"`)
+   - Searching in comments content
+
+**Why:** ast-index is 17-69x faster than grep (1-10ms vs 200ms-3s) and returns structured, accurate results.
+
 ## Prerequisites
 
 Install the CLI before use:
@@ -228,4 +243,7 @@ For detailed platform-specific commands, consult:
 - **`references/perl-commands.md`** - Perl exports, subs, POD
 - **`references/python-commands.md`** - Python classes, functions
 - **`references/go-commands.md`** - Go structs, interfaces
+- **`references/cpp-commands.md`** - C/C++ classes, JNI functions
+- **`references/proto-commands.md`** - Protocol Buffers messages, services
+- **`references/wsdl-commands.md`** - WSDL services, XSD types
 - **`references/module-commands.md`** - Module dependencies
