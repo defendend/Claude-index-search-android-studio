@@ -3,12 +3,14 @@
 //! Parses C and C++ source files (.cpp, .cc, .c, .h, .hpp) to extract:
 //! - Classes and structs
 //! - Template classes
-//! - Functions (including JNI exports)
-//! - Namespaces
+//! - Functions (including JNI exports and userver handlers)
+//! - Namespaces (including nested C++17 syntax)
 //! - Includes
 //!
-//! Focused on JNI bindings and simple modern C++ code (C++11/14/17).
-//! Does not handle complex template metaprogramming.
+//! Supports:
+//! - JNI bindings (JNIEXPORT ... JNICALL Java_*)
+//! - userver microservices (handlers, views, components)
+//! - Modern C++ (C++11/14/17/20)
 
 use anyhow::Result;
 use regex::Regex;
@@ -41,9 +43,14 @@ pub fn parse_cpp_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
         r"(?m)^(?:\s*)template\s*<[^>]*>\s*(?:inline\s+)?(?:auto|[\w:]+(?:<[^>]*>)?\s*[*&]?\s+)+(\w+)\s*\([^)]*\)"
     )?;
 
-    // Namespace
+    // Namespace - including C++17 nested namespaces (namespace a::b::c {)
     let namespace_re = Regex::new(
-        r"(?m)^namespace\s+(\w+)\s*\{"
+        r"(?m)^namespace\s+([\w:]+)\s*\{"
+    )?;
+
+    // Method definition in .cpp: ReturnType ClassName::MethodName(...)
+    let method_def_re = Regex::new(
+        r"(?m)^(?:[\w:]+(?:<[^>]*>)?\s*[*&]?\s+)?([\w]+)::([\w]+)\s*\([^)]*\)\s*(?:const)?\s*(?:noexcept)?\s*\{"
     )?;
 
     // Include - used in parse_cpp_includes, not in symbol extraction
@@ -173,16 +180,47 @@ pub fn parse_cpp_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
             }
         }
 
-        // Namespaces
+        // Namespaces (including nested like views::feeds)
         if let Some(caps) = namespace_re.captures(line) {
-            let name = caps.get(1).map(|m| m.as_str()).unwrap_or("").to_string();
-            if !name.is_empty() {
+            let full_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+            if !full_name.is_empty() {
+                // For nested namespaces, create a symbol for each part
+                // e.g., "views::feeds" creates symbols for "views" and "feeds"
+                for part in full_name.split("::") {
+                    if !part.is_empty() {
+                        symbols.push(ParsedSymbol {
+                            name: part.to_string(),
+                            kind: SymbolKind::Package,
+                            line: line_num,
+                            signature: trimmed.to_string(),
+                            parents: vec![],
+                        });
+                    }
+                }
+                // Also add the full namespace path as a symbol
+                if full_name.contains("::") {
+                    symbols.push(ParsedSymbol {
+                        name: full_name.to_string(),
+                        kind: SymbolKind::Package,
+                        line: line_num,
+                        signature: trimmed.to_string(),
+                        parents: vec![],
+                    });
+                }
+            }
+        }
+
+        // Method definitions in .cpp files (ClassName::MethodName)
+        if let Some(caps) = method_def_re.captures(line) {
+            let class_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+            let method_name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            if !method_name.is_empty() && !is_reserved_word(method_name) {
                 symbols.push(ParsedSymbol {
-                    name,
-                    kind: SymbolKind::Package,
+                    name: method_name.to_string(),
+                    kind: SymbolKind::Function,
                     line: line_num,
                     signature: trimmed.to_string(),
-                    parents: vec![],
+                    parents: vec![(class_name.to_string(), "member".to_string())],
                 });
             }
         }

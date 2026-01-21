@@ -273,6 +273,10 @@ pub enum SymbolKind {
     // Perl-specific
     Package,
     Constant,
+    // For imports/includes
+    Import,
+    // For annotations/decorators
+    Annotation,
 }
 
 impl SymbolKind {
@@ -287,6 +291,8 @@ impl SymbolKind {
             SymbolKind::TypeAlias => "typealias",
             SymbolKind::Package => "package",
             SymbolKind::Constant => "constant",
+            SymbolKind::Import => "import",
+            SymbolKind::Annotation => "annotation",
         }
     }
 }
