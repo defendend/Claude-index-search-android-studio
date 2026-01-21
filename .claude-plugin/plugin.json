@@ -1,8 +1,9 @@
 {
   "name": "ast-index",
-  "version": "3.6.2",
-  "description": "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, and Perl projects (46 CLI commands)",
+  "version": "3.8.0",
+  "description": "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, Python, Go, and Perl projects",
   "author": {
     "name": "defendend"
-  }
+  },
+  "commands": "./commands"
 }
