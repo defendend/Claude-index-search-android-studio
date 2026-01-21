@@ -274,19 +274,25 @@ fn parse_file(root: &Path, file_path: &Path) -> Result<ParsedFile> {
     let is_proto = ext == "proto";
     let is_wsdl = ext == "wsdl" || ext == "xsd";
     let is_cpp = ext == "cpp" || ext == "cc" || ext == "c" || ext == "hpp" || ext == "h";
+    let is_python = ext == "py";
+    let is_go = ext == "go";
 
     let (symbols, refs) = if is_objc {
-        parsers::parse_symbols_and_refs(&content, false, true, false, false, false, false)?
+        parsers::parse_symbols_and_refs(&content, false, true, false, false, false, false, false, false)?
     } else if is_perl {
-        parsers::parse_symbols_and_refs(&content, false, false, true, false, false, false)?
+        parsers::parse_symbols_and_refs(&content, false, false, true, false, false, false, false, false)?
     } else if is_proto {
-        parsers::parse_symbols_and_refs(&content, false, false, false, true, false, false)?
+        parsers::parse_symbols_and_refs(&content, false, false, false, true, false, false, false, false)?
     } else if is_wsdl {
-        parsers::parse_symbols_and_refs(&content, false, false, false, false, true, false)?
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, true, false, false, false)?
     } else if is_cpp {
-        parsers::parse_symbols_and_refs(&content, false, false, false, false, false, true)?
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, false, true, false, false)?
+    } else if is_python {
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, false, false, true, false)?
+    } else if is_go {
+        parsers::parse_symbols_and_refs(&content, false, false, false, false, false, false, false, true)?
     } else {
-        parsers::parse_symbols_and_refs(&content, is_swift, false, false, false, false, false)?
+        parsers::parse_symbols_and_refs(&content, is_swift, false, false, false, false, false, false, false)?
     };
 
     Ok(ParsedFile {

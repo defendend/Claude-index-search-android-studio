@@ -69,6 +69,9 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
     // Detect file type
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let is_perl = ext == "pm" || ext == "pl" || ext == "t";
+    let is_python = ext == "py";
+    let is_go = ext == "go";
+    let is_cpp = ext == "cpp" || ext == "cc" || ext == "c" || ext == "hpp" || ext == "h";
 
     println!("{}", format!("Outline of {}:", file).bold());
 
@@ -105,6 +108,94 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
             if let Some(caps) = our_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
                 println!("  {} {} [our]", format!(":{}", line_num).dimmed(), name);
+                found = true;
+            }
+        }
+    } else if is_python {
+        // Python patterns
+        let class_re = Regex::new(r"^class\s+([A-Za-z_][A-Za-z0-9_]*)")?;
+        let func_re = Regex::new(r"^(async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)")?;
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line_num = line_num + 1;
+
+            if let Some(caps) = class_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [class]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = func_re.captures(line) {
+                let is_async = caps.get(1).is_some();
+                let name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                let kind = if is_async { "async function" } else { "function" };
+                println!("  {} {} [{}]", format!(":{}", line_num).dimmed(), name, kind);
+                found = true;
+            }
+        }
+    } else if is_go {
+        // Go patterns
+        let package_re = Regex::new(r"^package\s+([a-z][a-z0-9_]*)")?;
+        let struct_re = Regex::new(r"^type\s+([A-Z][a-zA-Z0-9_]*)\s+struct")?;
+        let interface_re = Regex::new(r"^type\s+([A-Z][a-zA-Z0-9_]*)\s+interface")?;
+        let func_re = Regex::new(r"^func\s+(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(")?;
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line_num = line_num + 1;
+
+            if let Some(caps) = package_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [package]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = struct_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [struct]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = interface_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [interface]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = func_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [func]", format!(":{}", line_num).dimmed(), name);
+                found = true;
+            }
+        }
+    } else if is_cpp {
+        // C++ patterns
+        let namespace_re = Regex::new(r"^namespace\s+([\w:]+)\s*\{")?;
+        let class_re = Regex::new(r"^(?:class|struct)\s+([A-Z][a-zA-Z0-9_]*)")?;
+        let func_re = Regex::new(r"^(?:[\w:]+(?:<[^>]*>)?\s*[*&]?\s+)?([A-Z][a-zA-Z0-9_]*::)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const)?\s*(?:override)?\s*\{")?;
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line_num = line_num + 1;
+
+            if let Some(caps) = namespace_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [namespace]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = class_re.captures(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                println!("  {} {} [class]", format!(":{}", line_num).dimmed(), name.cyan());
+                found = true;
+            }
+
+            if let Some(caps) = func_re.captures(line) {
+                let class_prefix = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                if !class_prefix.is_empty() {
+                    println!("  {} {}::{} [method]", format!(":{}", line_num).dimmed(), class_prefix.trim_end_matches("::"), name);
+                } else {
+                    println!("  {} {} [function]", format!(":{}", line_num).dimmed(), name);
+                }
                 found = true;
             }
         }
@@ -169,6 +260,9 @@ pub fn cmd_imports(root: &Path, file: &str) -> Result<()> {
     // Detect file type by extension
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let is_perl = ext == "pm" || ext == "pl" || ext == "t";
+    let is_python = ext == "py";
+    let is_go = ext == "go";
+    let is_cpp = ext == "cpp" || ext == "cc" || ext == "c" || ext == "hpp" || ext == "h";
 
     println!("{}", format!("Imports in {}:", file).bold());
 
@@ -187,6 +281,51 @@ pub fn cmd_imports(root: &Path, file: &str) -> Result<()> {
                    !module.starts_with("v5") && !module.starts_with("5.") {
                     imports.push(format!("{} {}", keyword, module));
                 }
+            }
+        }
+    } else if is_python {
+        // Python: import module or from module import something
+        let import_re = Regex::new(r"^import\s+([A-Za-z_][A-Za-z0-9_\.]*)")?;
+        let from_re = Regex::new(r"^from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+(.+)")?;
+        for line in content.lines() {
+            if let Some(caps) = from_re.captures(line) {
+                let module = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let what = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                imports.push(format!("from {} import {}", module, what));
+            } else if let Some(caps) = import_re.captures(line) {
+                let module = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                imports.push(format!("import {}", module));
+            }
+        }
+    } else if is_go {
+        // Go: import "module" or import ( "module1" "module2" )
+        let single_import_re = Regex::new(r#"^import\s+"([^"]+)""#)?;
+        let import_block_start = Regex::new(r"^import\s*\(")?;
+        let import_line_re = Regex::new(r#"^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?"([^"]+)""#)?;
+
+        let mut in_import_block = false;
+        for line in content.lines() {
+            if in_import_block {
+                if line.trim() == ")" {
+                    in_import_block = false;
+                } else if let Some(caps) = import_line_re.captures(line) {
+                    let module = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                    imports.push(module.to_string());
+                }
+            } else if import_block_start.is_match(line) {
+                in_import_block = true;
+            } else if let Some(caps) = single_import_re.captures(line) {
+                let module = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                imports.push(module.to_string());
+            }
+        }
+    } else if is_cpp {
+        // C++: #include <header> or #include "header"
+        let include_re = Regex::new(r#"^\s*#include\s*[<"]([^>"]+)[>"]"#)?;
+        for line in content.lines() {
+            if let Some(caps) = include_re.captures(line) {
+                let header = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                imports.push(header.to_string());
             }
         }
     } else {

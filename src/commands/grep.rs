@@ -523,10 +523,10 @@ pub fn cmd_annotations(root: &Path, annotation: &str, limit: usize) -> Result<()
 /// Find deeplink definitions
 pub fn cmd_deeplinks(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
     let start = Instant::now();
-    // Search for deeplink patterns
-    // Android: @DeepLink, DeepLinkHandler, @AppLink, NavDeepLink
+    // Search for specific deeplink patterns (NOT generic :// URLs)
+    // Android: @DeepLink, DeepLinkHandler, @AppLink, NavDeepLink, intent-filter with android:scheme
     // iOS: openURL, application(_:open:, handleOpen, CFBundleURLSchemes, UniversalLink
-    let pattern = r#"://|deeplink|@DeepLink|DeepLinkHandler|@AppLink|NavDeepLink|openURL|application\([^)]*open:|handleOpen|CFBundleURLSchemes|UniversalLink|NSUserActivity"#;
+    let pattern = r#"[Dd]eep[Ll]ink|@DeepLink|DeepLinkHandler|@AppLink|NavDeepLink|android:scheme|openURL|application\([^)]*open:|handleOpen|CFBundleURLSchemes|UniversalLink|NSUserActivity"#;
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
