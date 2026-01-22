@@ -1,4 +1,4 @@
-# ast-index v3.8.2
+# ast-index v3.8.5
 
 Fast code search CLI for Android/Kotlin/Java, iOS/Swift/ObjC, Python, Go, C++, and Perl projects. Native Rust implementation.
 
@@ -325,6 +325,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.8.5
+- **Documentation** — added troubleshooting section for brew install merge conflict errors
 
 ### 3.8.2
 - **Plugin improvements**
