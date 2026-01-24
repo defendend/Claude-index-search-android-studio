@@ -23,7 +23,7 @@ use anyhow::Result;
 use colored::Colorize;
 use regex::Regex;
 
-use super::{search_files, relative_path};
+use super::{search_files_limited, relative_path};
 
 /// Find TODO/FIXME/HACK comments
 pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
@@ -38,8 +38,7 @@ pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
 
     let mut count = 0;
 
-    search_files(root, &search_pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], |path, line_num, line| {
-        if count >= limit { return; }
+    search_files_limited(root, &search_pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], limit, |path, line_num, line| {
 
         let rel_path = relative_path(root, path);
         let content: String = line.chars().take(80).collect();
@@ -90,8 +89,7 @@ pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()>
     let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::new();
     let mut count = 0;
 
-    search_files(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], |path, line_num, line| {
-        if count >= limit { return; }
+    search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], limit, |path, line_num, line| {
         if def_pattern.is_match(line) { return; } // Skip definitions
 
         let rel_path = relative_path(root, path);
@@ -178,8 +176,7 @@ fn find_caller_functions(root: &Path, function_name: &str, limit: usize) -> Resu
     let mut files_with_calls: HashMap<PathBuf, Vec<usize>> = HashMap::new();
 
     // First pass: find all files and line numbers with calls
-    search_files(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], |path, line_num, line| {
-        if results.len() >= limit * 3 { return; } // Collect more to filter later
+    search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], limit * 3, |path, line_num, line| {
         if def_pattern.is_match(line) { return; }
 
         files_with_calls.entry(path.to_path_buf()).or_default().push(line_num);
@@ -313,8 +310,7 @@ pub fn cmd_suspend(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
 
     let mut suspends: Vec<(String, String, usize)> = vec![];
 
-    search_files(root, pattern, &["kt"], |path, line_num, line| {
-        if suspends.len() >= limit { return; }
+    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
 
         if let Some(caps) = func_regex.captures(line) {
             let func_name = caps.get(1).unwrap().as_str().to_string();
@@ -350,8 +346,7 @@ pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result
     let func_regex = Regex::new(r"fun\s+(\w+)\s*\(")?;
 
     // This is a simplified version - proper impl would need context
-    search_files(root, pattern, &["kt"], |path, line_num, line| {
-        if composables.len() >= limit { return; }
+    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
 
         if line.contains("@Composable") {
             pending_composable = Some((path.to_path_buf(), line_num));
@@ -394,9 +389,7 @@ pub fn cmd_deprecated(root: &Path, query: Option<&str>, limit: usize) -> Result<
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(root, pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], limit, |path, line_num, line| {
         if let Some(q) = query {
             if !line.to_lowercase().contains(&q.to_lowercase()) {
                 return;
@@ -426,9 +419,7 @@ pub fn cmd_suppress(root: &Path, query: Option<&str>, limit: usize) -> Result<()
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(root, pattern, &["kt"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
         if let Some(q) = query {
             if !line.to_lowercase().contains(&q.to_lowercase()) {
                 return;
@@ -458,9 +449,7 @@ pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(root, pattern, &["kt", "java"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt", "java"], limit, |path, line_num, line| {
         if !line.contains(type_name) && !line.contains("@Inject") {
             return;
         }
@@ -501,9 +490,7 @@ pub fn cmd_annotations(root: &Path, annotation: &str, limit: usize) -> Result<()
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "pm", "pl", "t"], limit, |path, line_num, line| {
         let rel_path = relative_path(root, path);
         let content: String = line.trim().chars().take(80).collect();
         items.push((rel_path, line_num, content));
@@ -530,9 +517,7 @@ pub fn cmd_deeplinks(root: &Path, query: Option<&str>, limit: usize) -> Result<(
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(root, pattern, &["kt", "java", "xml", "swift", "m", "h", "plist"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt", "java", "xml", "swift", "m", "h", "plist"], limit, |path, line_num, line| {
         if let Some(q) = query {
             if !line.to_lowercase().contains(&q.to_lowercase()) {
                 return;
@@ -569,9 +554,7 @@ pub fn cmd_extensions(root: &Path, receiver_type: &str, limit: usize) -> Result<
 
     let mut items: Vec<(String, String, usize, String)> = vec![]; // (name, path, line, lang)
 
-    search_files(root, &pattern, &["kt", "swift"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, &pattern, &["kt", "swift"], limit, |path, line_num, line| {
         let rel_path = relative_path(root, path);
 
         if let Some(caps) = kotlin_regex.captures(line) {
@@ -605,9 +588,7 @@ pub fn cmd_flows(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
 
     let mut items: Vec<(String, String, usize, String)> = vec![];
 
-    search_files(root, pattern, &["kt"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
         if let Some(caps) = flow_regex.captures(line) {
             let flow_type = caps.get(1).unwrap().as_str().to_string();
 
@@ -643,9 +624,7 @@ pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()
     let mut items: Vec<(String, String, usize)> = vec![];
     let mut pending_preview: Option<(PathBuf, usize)> = None;
 
-    search_files(root, pattern, &["kt"], |path, line_num, line| {
-        if items.len() >= limit { return; }
-
+    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
         if line.contains("@Preview") {
             pending_preview = Some((path.to_path_buf(), line_num));
         }

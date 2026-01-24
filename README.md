@@ -1,4 +1,4 @@
-# ast-index v3.9.0
+# ast-index v3.9.1
 
 Fast code search CLI for 14 programming languages. Native Rust implementation.
 
@@ -300,6 +300,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.9.1
+- **Performance fix** — grep-based commands now use early termination
+  - Commands like `deeplinks`, `todo`, `callers` etc. stop scanning after finding `limit` results
+  - Up to 100-1000x faster on large codebases (29k files: 4-35s → 10-50ms)
 
 ### 3.9.0
 - **TypeScript/JavaScript support** — index and search web projects

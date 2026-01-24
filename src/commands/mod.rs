@@ -129,7 +129,6 @@ where
 }
 
 /// Fast parallel file search with early termination support
-#[allow(dead_code)]
 pub fn search_files_limited<F>(
     root: &Path,
     pattern: &str,
