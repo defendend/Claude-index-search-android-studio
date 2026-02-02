@@ -105,8 +105,11 @@ pub fn parse_dart_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
     // Track class names for constructor matching
     let mut class_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // Collect all lines once for multiline lookups
+    let lines_vec: Vec<&str> = content.lines().collect();
+
     // First pass: collect class names
-    for line in content.lines() {
+    for line in &lines_vec {
         if let Some(caps) = class_re.captures(line) {
             if let Some(name) = caps.get(1) {
                 class_names.insert(name.as_str().to_string());
@@ -122,7 +125,7 @@ pub fn parse_dart_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
         "extension", "typedef", "abstract", "sealed", "base", "interface",
     ].into_iter().collect();
 
-    for (line_num, line) in content.lines().enumerate() {
+    for (line_num, line) in lines_vec.iter().enumerate() {
         let line_num = line_num + 1;
         let trimmed = line.trim();
 
@@ -206,8 +209,7 @@ pub fn parse_dart_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
                 // next lines may have 'with', 'implements', 'extends'
                 let mut full_decl = trimmed.to_string();
                 if !trimmed.contains('{') {
-                    let lines_vec: Vec<&str> = content.lines().collect();
-                    let mut next = line_num; // line_num is 1-indexed, so this is next line index
+                    let mut next = line_num; // line_num is already 1-indexed, matches 0-based next line
                     while next < lines_vec.len() {
                         let next_trimmed = lines_vec[next].trim();
                         if next_trimmed.starts_with("with ")

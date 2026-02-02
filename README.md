@@ -1,4 +1,4 @@
-# ast-index v3.10.2
+# ast-index v3.10.3
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -320,6 +320,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.10.3
+- **2.6x faster indexing on large projects** — fix Dart parser allocating lines vector per class declaration
 
 ### 3.10.2
 - **Fix `changed` command** — use `merge-base` instead of direct diff to show only current branch changes
