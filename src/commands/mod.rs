@@ -68,11 +68,12 @@ where
 {
     let matcher = RegexMatcher::new(pattern).context("Invalid regex pattern")?;
     let no_ignore = is_no_ignore_enabled(root);
+    let use_git = crate::indexer::has_git_repo(root) && !no_ignore;
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(!no_ignore)
-        .git_exclude(!no_ignore)
+        .git_ignore(use_git)
+        .git_exclude(use_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
         .threads(num_cpus())
         .build_parallel();
@@ -142,11 +143,12 @@ where
 {
     let matcher = RegexMatcher::new(pattern).context("Invalid regex pattern")?;
     let no_ignore = is_no_ignore_enabled(root);
+    let use_git = crate::indexer::has_git_repo(root) && !no_ignore;
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(!no_ignore)
-        .git_exclude(!no_ignore)
+        .git_ignore(use_git)
+        .git_exclude(use_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
         .threads(num_cpus())
         .build_parallel();

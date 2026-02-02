@@ -237,7 +237,7 @@ pub fn cmd_provides(root: &Path, type_name: &str, limit: usize) -> Result<()> {
     use ignore::WalkBuilder;
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(crate::indexer::has_git_repo(root))
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
         .build();
 

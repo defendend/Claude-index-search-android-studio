@@ -440,6 +440,11 @@ const EXCLUDED_DIRS: &[&str] = &[
     ".parcel-cache",
 ];
 
+/// Check if root has a .git directory/file (false for arc/FUSE mounts)
+pub fn has_git_repo(root: &Path) -> bool {
+    root.join(".git").exists()
+}
+
 /// Check if a path component matches an excluded directory
 pub fn is_excluded_dir(entry: &ignore::DirEntry) -> bool {
     if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
@@ -452,7 +457,12 @@ pub fn is_excluded_dir(entry: &ignore::DirEntry) -> bool {
     }
 }
 
-pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool) -> Result<usize> {
+/// Module-related file names to collect during directory walk
+fn is_module_file(name: &str) -> bool {
+    name == "build.gradle" || name == "build.gradle.kts" || name == "Package.swift" || name.ends_with(".pm")
+}
+
+pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool) -> Result<(usize, Vec<PathBuf>)> {
     use ignore::WalkBuilder;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -467,26 +477,36 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
     }
 
     // Collect all file paths (paths are lightweight, OK to keep in memory)
+    let use_git = has_git_repo(root) && !no_ignore;
     let walker = WalkBuilder::new(root)
         .hidden(true)
         .follow_links(false)     // Never follow symlinks — prevents loops in monorepos
         .max_depth(Some(50))     // Prevent runaway traversal in deeply nested structures
-        .git_ignore(!no_ignore)  // Respect .gitignore unless --no-ignore
-        .git_exclude(!no_ignore)
+        .git_ignore(use_git)     // Respect .gitignore only if .git exists
+        .git_exclude(use_git)
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
-    let files: Vec<PathBuf> = walker
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(parsers::is_supported_extension)
-                .unwrap_or(false)
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect();
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut module_files: Vec<PathBuf> = Vec::new();
+
+    for entry in walker.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        // Collect module-related files for index_modules
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if is_module_file(name) {
+                module_files.push(path.to_path_buf());
+            }
+        }
+        // Collect parseable source files
+        if path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(parsers::is_supported_extension)
+            .unwrap_or(false)
+        {
+            files.push(path.to_path_buf());
+        }
+    }
 
     let total_files = files.len();
     if progress {
@@ -538,7 +558,7 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
         eprintln!("Written {} / {} files to DB", total_count, total_files);
     }
 
-    Ok(total_count)
+    Ok((total_count, module_files))
 }
 
 /// Write a batch of parsed files to DB in a single transaction
@@ -621,7 +641,7 @@ pub fn update_directory_incremental(conn: &mut Connection, root: &Path, progress
     // 2. Walk filesystem and collect files to update
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
@@ -773,10 +793,26 @@ pub fn index_modules(conn: &Connection, root: &Path) -> Result<usize> {
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
+    let files: Vec<PathBuf> = walker
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().file_name()
+                .and_then(|n| n.to_str())
+                .map(is_module_file)
+                .unwrap_or(false)
+        })
+        .map(|e| e.path().to_path_buf())
+        .collect();
+
+    index_modules_from_files(conn, root, &files)
+}
+
+/// Index modules from a pre-collected list of module files (avoids re-walking the filesystem)
+pub fn index_modules_from_files(conn: &Connection, root: &Path, files: &[PathBuf]) -> Result<usize> {
     let mut count = 0;
 
     // Regex to extract SPM targets from Package.swift
@@ -784,9 +820,7 @@ pub fn index_modules(conn: &Connection, root: &Path) -> Result<usize> {
 
     let spm_target_re = &*SPM_TARGET_RE;
 
-    for entry in walker {
-        let entry = entry?;
-        let path = entry.path();
+    for path in files {
 
         if let Some(name) = path.file_name() {
             let name_str = name.to_string_lossy();
@@ -926,7 +960,7 @@ pub fn index_module_dependencies(conn: &mut Connection, root: &Path, progress: b
 
         let walker = WalkBuilder::new(root)
             .hidden(true)
-            .git_ignore(true)
+            .git_ignore(has_git_repo(root))
             .filter_entry(|entry| !is_excluded_dir(entry))
             .build();
 
@@ -1075,7 +1109,7 @@ pub fn index_xml_usages(conn: &mut Connection, root: &Path, progress: bool) -> R
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
@@ -1232,7 +1266,7 @@ pub fn index_resources(conn: &mut Connection, root: &Path, progress: bool) -> Re
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
@@ -1369,7 +1403,7 @@ pub fn index_resources(conn: &mut Connection, root: &Path, progress: bool) -> Re
 
         let walker = WalkBuilder::new(root)
             .hidden(true)
-            .git_ignore(true)
+            .git_ignore(has_git_repo(root))
             .filter_entry(|entry| !is_excluded_dir(entry))
             .build();
 
@@ -1570,7 +1604,7 @@ pub fn index_storyboard_usages(conn: &mut Connection, root: &Path, progress: boo
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
@@ -1712,7 +1746,7 @@ pub fn index_ios_assets(conn: &mut Connection, root: &Path, progress: bool) -> R
 
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .git_ignore(true)
+        .git_ignore(has_git_repo(root))
         .filter_entry(|entry| !is_excluded_dir(entry))
         .build();
 
@@ -1821,7 +1855,7 @@ pub fn index_ios_assets(conn: &mut Connection, root: &Path, progress: bool) -> R
 
         let walker = WalkBuilder::new(root)
             .hidden(true)
-            .git_ignore(true)
+            .git_ignore(has_git_repo(root))
             .filter_entry(|entry| !is_excluded_dir(entry))
             .build();
 

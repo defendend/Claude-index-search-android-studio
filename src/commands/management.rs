@@ -64,8 +64,8 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
     match index_type {
         "all" => {
             println!("{}", "Rebuilding full index...".cyan());
-            let file_count = indexer::index_directory(&mut conn, root, true, no_ignore)?;
-            let module_count = indexer::index_modules(&conn, root)?;
+            let (file_count, module_files) = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            let module_count = indexer::index_modules_from_files(&conn, root, &module_files)?;
 
             // Index CocoaPods/Carthage for iOS
             if is_ios {
@@ -142,7 +142,7 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             println!("{}", "Rebuilding symbols index...".cyan());
             conn.execute("DELETE FROM symbols", [])?;
             conn.execute("DELETE FROM files", [])?;
-            let file_count = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            let (file_count, _) = indexer::index_directory(&mut conn, root, true, no_ignore)?;
             println!("{}", format!("Indexed {} files", file_count).green());
         }
         "modules" => {
