@@ -1,0 +1,152 @@
+name: Release Build
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            name: darwin-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            name: darwin-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: matrix.name != 'windows-x86_64'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf ../../../ast-index-${{ github.ref_name }}-${{ matrix.name }}.tar.gz ast-index
+
+      - name: Package (windows)
+        if: matrix.name == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "target/${{ matrix.target }}/release/ast-index.exe" -DestinationPath "ast-index-${{ github.ref_name }}-${{ matrix.name }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ast-index-${{ matrix.name }}
+          path: ast-index-${{ github.ref_name }}-${{ matrix.name }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download archives and compute sha256
+        id: sha
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          for platform in darwin-arm64 darwin-x86_64 linux-x86_64; do
+            curl -L -o "ast-index-${platform}.tar.gz" \
+              "https://github.com/${REPO}/releases/download/${TAG}/ast-index-${TAG}-${platform}.tar.gz"
+            hash=$(sha256sum "ast-index-${platform}.tar.gz" | cut -d ' ' -f1)
+            echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: defendend/homebrew-ast-index
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
+          SHA_DARWIN_ARM64: ${{ steps.sha.outputs.darwin-arm64 }}
+          SHA_DARWIN_X86_64: ${{ steps.sha.outputs.darwin-x86_64 }}
+          SHA_LINUX_X86_64: ${{ steps.sha.outputs.linux-x86_64 }}
+        run: |
+          cat > Formula/ast-index.rb << FORMULA
+          class AstIndex < Formula
+            desc "Fast code search CLI for Android, iOS, TypeScript, Rust, Ruby, C#, Python, Go, Perl, C++ projects"
+            homepage "https://github.com/defendend/Claude-ast-index-search"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/defendend/Claude-ast-index-search/releases/download/${TAG}/ast-index-${TAG}-darwin-arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/defendend/Claude-ast-index-search/releases/download/${TAG}/ast-index-${TAG}-darwin-x86_64.tar.gz"
+                sha256 "${SHA_DARWIN_X86_64}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/defendend/Claude-ast-index-search/releases/download/${TAG}/ast-index-${TAG}-linux-x86_64.tar.gz"
+              sha256 "${SHA_LINUX_X86_64}"
+            end
+
+            def install
+              bin.install "ast-index"
+            end
+
+            test do
+              assert_match "ast-index v${VERSION}", shell_output("#{bin}/ast-index version")
+            end
+          end
+          FORMULA
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/ast-index.rb
+          git commit -m "Update to ${{ github.ref_name }}"
+          git push
