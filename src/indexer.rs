@@ -416,6 +416,28 @@ const EXCLUDED_DIRS: &[&str] = &[
     ".tox",
     "coverage",
     ".cache",
+    // Build system outputs
+    "out",
+    "bazel-out",
+    "bazel-bin",
+    "bazel-genfiles",
+    "bazel-testlogs",
+    "buck-out",
+    "_build",
+    // IDE / tooling
+    ".metals",
+    ".bsp",
+    ".dart_tool",
+    // Temp / generated
+    "tmp",
+    "temp",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    // Other
+    "_site",
+    ".turbo",
+    ".parcel-cache",
 ];
 
 /// Check if a path component matches an excluded directory
@@ -447,6 +469,8 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
     // Collect all file paths (paths are lightweight, OK to keep in memory)
     let walker = WalkBuilder::new(root)
         .hidden(true)
+        .follow_links(false)     // Never follow symlinks — prevents loops in monorepos
+        .max_depth(Some(50))     // Prevent runaway traversal in deeply nested structures
         .git_ignore(!no_ignore)  // Respect .gitignore unless --no-ignore
         .git_exclude(!no_ignore)
         .filter_entry(|entry| !is_excluded_dir(entry))
@@ -504,7 +528,7 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
         // Write to DB and free parsed_files
         write_batch_to_db(conn, parsed_files, &mut total_count)?;
 
-        if progress && (chunk_idx + 1) % 4 == 0 {
+        if progress {
             eprintln!("Written {} / {} files to DB...", total_count, total_files);
         }
     }

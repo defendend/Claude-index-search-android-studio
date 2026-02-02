@@ -1,4 +1,4 @@
-# ast-index v3.10.0
+# ast-index v3.10.1
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -320,6 +320,12 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.10.1
+- **Fix indexing hangs on large monorepos** — disable symlink following, add max depth limit
+- **Expanded excluded directories** — added `bazel-out`, `bazel-bin`, `buck-out`, `out`, `.metals`, `.dart_tool` and more
+- **Better progress reporting** — output after every chunk instead of every 4th
+- **GitHub Actions release workflow** — automated builds for darwin-arm64, darwin-x86_64, linux-x86_64, windows-x86_64
 
 ### 3.10.0
 - **Dart/Flutter support** — index and search Dart/Flutter codebases
