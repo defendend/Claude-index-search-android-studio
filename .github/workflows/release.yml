@@ -160,5 +160,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/ast-index.rb
+          git diff --staged --quiet && echo "Formula already up to date" && exit 0
           git commit -m "Update to ${{ env.RELEASE_TAG }}"
           git push
