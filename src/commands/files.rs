@@ -410,18 +410,47 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
     Ok(())
 }
 
-/// Show changed symbols in git diff
-pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
-    let start = Instant::now();
+/// Detect which VCS is used in the project directory
+fn detect_vcs(root: &Path) -> &'static str {
+    if root.join(".arc").exists() || root.join(".arcconfig").exists() {
+        "arc"
+    } else {
+        "git"
+    }
+}
 
-    // Get list of changed files from git
-    let output = std::process::Command::new("git")
-        .args(["diff", "--name-only", base])
+/// Get merge-base between HEAD and the given base branch
+fn get_merge_base(root: &Path, vcs: &str, base: &str) -> Result<String> {
+    let output = std::process::Command::new(vcs)
+        .args(["merge-base", "HEAD", base])
         .current_dir(root)
         .output()?;
 
     if !output.status.success() {
-        println!("{}", format!("Failed to get git diff: {:?}", output.status).red());
+        // Fallback to direct base if merge-base fails
+        return Ok(base.to_string());
+    }
+
+    Ok(std::str::from_utf8(&output.stdout)?.trim().to_string())
+}
+
+/// Show changed symbols in git/arc diff
+pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
+    let start = Instant::now();
+
+    let vcs = detect_vcs(root);
+
+    // Find merge-base to only show changes from the current branch
+    let merge_base = get_merge_base(root, vcs, base)?;
+
+    // Get list of changed files
+    let output = std::process::Command::new(vcs)
+        .args(["diff", "--name-only", &merge_base])
+        .current_dir(root)
+        .output()?;
+
+    if !output.status.success() {
+        println!("{}", format!("Failed to get {} diff: {:?}", vcs, output.status).red());
         return Ok(());
     }
 

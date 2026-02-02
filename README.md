@@ -1,4 +1,4 @@
-# ast-index v3.10.1
+# ast-index v3.10.2
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -320,6 +320,10 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.10.2
+- **Fix `changed` command** — use `merge-base` instead of direct diff to show only current branch changes
+- **Arc (Arcadia) support** — auto-detect arc vs git, use correct VCS commands
 
 ### 3.10.1
 - **Fix indexing hangs on large monorepos** — disable symlink following, add max depth limit
