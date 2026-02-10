@@ -1,6 +1,6 @@
 [package]
 name = "ast-index"
-version = "3.11.2"
+version = "3.12.0"
 edition = "2021"
 description = "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, Perl, Python, Go, C++, and Protocol Buffers projects"
 license = "MIT"
@@ -31,6 +31,22 @@ notify = "7"
 notify-debouncer-mini = "0.5"
 parking_lot = "0.12"
 crossbeam-channel = "0.5"
+
+# Tree-sitter AST parsing
+tree-sitter = "0.26"
+tree-sitter-go = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-kotlin-ng = "1.1"
+tree-sitter-java = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-swift = "0.7"
+tree-sitter-ruby = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-dart = "0.0.4"
+tree-sitter-objc = "3.0"
+tree-sitter-proto = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

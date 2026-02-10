@@ -1,4 +1,4 @@
-# ast-index v3.11.2
+# ast-index v3.12.0
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -320,6 +320,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.12.0
+- **Tree-sitter AST parsing for 12 languages** — replaced regex-based parsers with tree-sitter for Kotlin, Java, Swift, ObjC, Python, Go, Rust, Ruby, C#, C++, Dart, Proto, and TypeScript. Parsing is now based on real ASTs instead of regex heuristics — more accurate symbol extraction, correct handling of nested constructs, and fewer false positives
+- **Grouped `--help` output** — commands organized into 8 logical categories (Index Management, Search & Navigation, Module Commands, Code Patterns, Android, iOS, Perl, Project Configuration) instead of a flat alphabetical list
+- **Updated project description** — "Fast code search for multi-language projects"
 
 ### 3.11.2
 - **Fix `watch` command on large projects** — switched from kqueue to FSEvents (macOS) / inotify (Linux), fixes "Too many open files" error
