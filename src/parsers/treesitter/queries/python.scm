@@ -1,0 +1,60 @@
+; Import: import X
+(import_statement
+  name: (dotted_name) @import_name)
+
+; Import: from X import Y, Z
+(import_from_statement
+  module_name: (dotted_name) @import_from_module
+  name: (dotted_name) @import_from_name)
+
+; Import: from X import Y as Z
+(import_from_statement
+  module_name: (dotted_name) @import_from_module_alias
+  name: (aliased_import
+    name: (dotted_name) @import_from_aliased_name))
+
+; Class definition (with or without parents)
+(class_definition
+  name: (identifier) @class_name
+  superclasses: (argument_list)? @class_parents)
+
+; Decorated class — get the decorator
+(decorated_definition
+  (decorator) @decorator
+  (class_definition))
+
+; Decorated function — get the decorator
+(decorated_definition
+  (decorator) @func_decorator
+  (function_definition))
+
+; Functions at module level
+(module
+  (function_definition
+    name: (identifier) @func_name))
+
+; Functions inside decorated_definition at module level
+(module
+  (decorated_definition
+    (function_definition
+      name: (identifier) @decorated_func_name)))
+
+; Functions inside class (methods)
+(class_definition
+  body: (block
+    (function_definition
+      name: (identifier) @method_name)))
+
+; Decorated methods inside class
+(class_definition
+  body: (block
+    (decorated_definition
+      (function_definition
+        name: (identifier) @decorated_method_name))))
+
+; Module-level assignments (constants and type aliases)
+(module
+  (expression_statement
+    (assignment
+      left: (identifier) @assignment_name
+      right: (_) @assignment_value)))

@@ -16,18 +16,7 @@
 //! - C# (.NET, Unity, ASP.NET)
 //! - Dart/Flutter
 
-pub mod cpp;
-pub mod csharp;
-pub mod dart;
-pub mod go;
-pub mod kotlin;
-pub mod objc;
 pub mod perl;
-pub mod proto;
-pub mod python;
-pub mod ruby;
-pub mod rust;
-pub mod swift;
 pub mod typescript;
 pub mod wsdl;
 
@@ -345,19 +334,8 @@ pub fn strip_xml_comments(content: &str) -> String {
     String::from_utf8(result).unwrap_or_else(|_| content.to_string())
 }
 
-// Re-export parser functions
-pub use cpp::parse_cpp_symbols;
-pub use csharp::parse_csharp_symbols;
-pub use dart::parse_dart_symbols;
-pub use go::parse_go_symbols;
-pub use kotlin::{parse_kotlin_symbols, parse_parents};
-pub use objc::parse_objc_symbols;
+// Re-export parser functions for fallback languages (no tree-sitter support)
 pub use perl::parse_perl_symbols;
-pub use proto::parse_proto_symbols;
-pub use python::parse_python_symbols;
-pub use ruby::parse_ruby_symbols;
-pub use rust::parse_rust_symbols;
-pub use swift::parse_swift_symbols;
 pub use typescript::{parse_typescript_symbols, extract_vue_script, extract_svelte_script};
 pub use wsdl::parse_wsdl_symbols;
 
@@ -444,26 +422,25 @@ fn strip_comments(content: &str, file_type: FileType) -> String {
     }
 }
 
-/// Parse symbols and references from file content using FileType enum
+pub mod treesitter;
+
+/// Parse symbols and references from file content using FileType enum.
+/// Tries tree-sitter first for supported languages, falls back to regex.
 pub fn parse_file_symbols(content: &str, file_type: FileType) -> Result<(Vec<ParsedSymbol>, Vec<ParsedRef>)> {
+    // Try tree-sitter parser first
+    if let Some(ts_parser) = treesitter::get_treesitter_parser(file_type) {
+        let symbols = ts_parser.parse_symbols(content)?;
+        let refs = ts_parser.extract_refs(content, &symbols)?;
+        return Ok((symbols, refs));
+    }
+
+    // Fallback: regex-based parsing for unsupported languages
     let stripped = strip_comments(content, file_type);
     let content = &stripped;
 
     let symbols = match file_type {
-        FileType::Kotlin => parse_kotlin_symbols(content)?,
-        FileType::Swift => parse_swift_symbols(content)?,
-        FileType::ObjC => parse_objc_symbols(content)?,
         FileType::Perl => parse_perl_symbols(content)?,
-        FileType::Proto => parse_proto_symbols(content)?,
         FileType::Wsdl => parse_wsdl_symbols(content)?,
-        FileType::Cpp => parse_cpp_symbols(content)?,
-        FileType::Python => parse_python_symbols(content)?,
-        FileType::Go => parse_go_symbols(content)?,
-        FileType::Rust => parse_rust_symbols(content)?,
-        FileType::Ruby => parse_ruby_symbols(content)?,
-        FileType::CSharp => parse_csharp_symbols(content)?,
-        FileType::Dart => parse_dart_symbols(content)?,
-        FileType::TypeScript => parse_typescript_symbols(content)?,
         FileType::Vue => {
             let script = extract_vue_script(content);
             let script_stripped = strip_c_comments(&script, false);
@@ -474,6 +451,8 @@ pub fn parse_file_symbols(content: &str, file_type: FileType) -> Result<(Vec<Par
             let script_stripped = strip_c_comments(&script, false);
             parse_typescript_symbols(&script_stripped)?
         }
+        // All other types are handled by tree-sitter above
+        _ => return Err(anyhow::anyhow!("No parser for {:?}", file_type)),
     };
     let refs = extract_references(content, &symbols)?;
     Ok((symbols, refs))

@@ -1,0 +1,28 @@
+; Class definition: class Foo or class Foo < Bar
+(class
+  name: (_) @class_name
+  superclass: (superclass (_) @class_parent)?)
+
+; Module definition: module Foo
+(module
+  name: (_) @module_name)
+
+; Instance method: def method_name
+(method
+  name: (_) @method_name)
+
+; Singleton method: def self.method_name
+(singleton_method
+  object: (_) @singleton_object
+  name: (_) @singleton_method_name)
+
+; Assignment: CONSTANT = value (top-level or inside class/module)
+(assignment
+  left: (constant) @assign_const_name
+  right: (_) @assign_const_value)
+
+; Call expressions (DSL methods like require, include, attr_reader, etc.)
+; We capture the method name and first argument for all call nodes
+(call
+  method: (_) @call_method
+  arguments: (argument_list . (_) @call_first_arg)?)

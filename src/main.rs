@@ -9,8 +9,88 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "ast-index")]
-#[command(about = "Fast code search for Android/Kotlin/Java projects")]
+#[command(about = "Fast code search for multi-language projects")]
 #[command(version)]
+#[command(help_template = "\
+{before-help}{name} v{version}
+{about}
+
+{usage-heading} {usage}
+
+Index Management:
+  init                   Initialize index for current project
+  rebuild                Rebuild index (full reindex)
+  update                 Update index (incremental)
+  stats                  Show index statistics
+  clear                  Clear index database
+  version                Show version
+  watch                  Watch for file changes and auto-update
+
+Search & Navigation:
+  search                 Universal search (files + symbols)
+  file                   Find files by name
+  symbol                 Find symbols (classes, interfaces, functions)
+  class                  Find class or interface
+  hierarchy              Show class hierarchy
+  implementations        Find implementations (subclasses/implementors)
+  refs                   Cross-references: definitions, imports, usages
+  usages                 Find usages of a symbol
+  outline                Show symbols in a file
+  imports                Show imports in a file
+  changed                Show changed symbols (git/arc diff)
+
+Module Commands:
+  module                 Find modules
+  deps                   Show module dependencies
+  dependents             Show reverse dependencies
+  unused-deps            Find unused dependencies in a module
+  api                    Show public API of a module
+  unused-symbols         Find potentially unused symbols
+
+Code Patterns (grep-based):
+  todo                   Find TODO/FIXME/HACK comments
+  callers                Find callers of a function
+  call-tree              Show call hierarchy tree
+  annotations            Find classes with annotation
+  deprecated             Find @Deprecated items
+  suppress               Find @Suppress annotations
+  provides               Find @Provides/@Binds (Dagger)
+  inject                 Find @Inject points
+  composables            Find @Composable functions
+  suspend                Find suspend functions
+  flows                  Find Flow/StateFlow/SharedFlow
+  extensions             Find extension functions
+  deeplinks              Find deeplinks
+  previews               Find @Preview functions
+
+Android:
+  xml-usages             Find class usages in XML layouts
+  resource-usages        Find resource usages
+
+iOS (Swift/ObjC):
+  storyboard-usages      Find class usages in storyboards/xibs
+  asset-usages           Find iOS asset usages (xcassets)
+  swiftui                Find SwiftUI views and state properties
+  async-funcs            Find async functions (Swift)
+  publishers             Find Combine publishers
+  main-actor             Find @MainActor annotations
+
+Perl:
+  perl-exports           Find exported functions (@EXPORT)
+  perl-subs              Find subroutines
+  perl-pod               Find POD documentation
+  perl-tests             Find test assertions
+  perl-imports           Find use/require statements
+
+Project Configuration:
+  add-root               Add additional source root
+  remove-root            Remove source root
+  list-roots             List configured source roots
+  install-claude-plugin  Install Claude Code plugin
+
+Options:
+{options}{after-help}\
+")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

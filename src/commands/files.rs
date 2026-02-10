@@ -202,8 +202,8 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
             }
         }
     } else if ext == "dart" {
-        // Dart patterns — delegate to parser for correct results
-        let symbols = crate::parsers::parse_dart_symbols(&content)?;
+        // Dart — delegate to tree-sitter parser for correct results
+        let (symbols, _refs) = crate::parsers::parse_file_symbols(&content, crate::parsers::FileType::Dart)?;
         for sym in &symbols {
             // Skip imports/properties for outline (too noisy)
             match sym.kind {
