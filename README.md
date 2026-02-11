@@ -1,4 +1,4 @@
-# ast-index v3.13.2
+# ast-index v3.13.3
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -320,6 +320,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.13.3
+- **iOS indexing performance** — eliminate 3 redundant filesystem walks during `rebuild`; storyboard/xib files and .xcassets directories are now collected in the main walk, swift file asset usages queried from DB instead of a 4th walk
 
 ### 3.13.2
 - **Fix `rebuild` losing extra roots** — `add-root` paths are now preserved across `rebuild` (previously deleted with DB)

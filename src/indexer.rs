@@ -310,7 +310,16 @@ fn is_module_file(name: &str) -> bool {
     name == "build.gradle" || name == "build.gradle.kts" || name == "Package.swift" || name.ends_with(".pm")
 }
 
-pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool) -> Result<(usize, Vec<PathBuf>)> {
+/// Result of the filesystem walk in index_directory.
+/// Collects all interesting paths in a single walk to avoid redundant traversals.
+pub struct WalkResult {
+    pub file_count: usize,
+    pub module_files: Vec<PathBuf>,
+    pub storyboard_files: Vec<PathBuf>,  // .storyboard, .xib
+    pub xcassets_dirs: Vec<PathBuf>,      // .xcassets directories
+}
+
+pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool) -> Result<WalkResult> {
     use ignore::WalkBuilder;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -337,6 +346,8 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
 
     let mut files: Vec<PathBuf> = Vec::new();
     let mut module_files: Vec<PathBuf> = Vec::new();
+    let mut storyboard_files: Vec<PathBuf> = Vec::new();
+    let mut xcassets_dirs: Vec<PathBuf> = Vec::new();
 
     for entry in walker.filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -346,13 +357,19 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
                 module_files.push(path.to_path_buf());
             }
         }
-        // Collect parseable source files
-        if path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(parsers::is_supported_extension)
-            .unwrap_or(false)
-        {
-            files.push(path.to_path_buf());
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            // Collect parseable source files
+            if parsers::is_supported_extension(ext) {
+                files.push(path.to_path_buf());
+            }
+            // Collect storyboard/xib files (iOS)
+            if ext == "storyboard" || ext == "xib" {
+                storyboard_files.push(path.to_path_buf());
+            }
+            // Collect .xcassets directories (iOS)
+            if ext == "xcassets" && path.is_dir() {
+                xcassets_dirs.push(path.to_path_buf());
+            }
         }
     }
 
@@ -406,7 +423,12 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
         eprintln!("Written {} / {} files to DB", total_count, total_files);
     }
 
-    Ok((total_count, module_files))
+    Ok(WalkResult {
+        file_count: total_count,
+        module_files,
+        storyboard_files,
+        xcassets_dirs,
+    })
 }
 
 /// Write a batch of parsed files to DB in a single transaction
@@ -1352,9 +1374,7 @@ pub struct StoryboardUsage {
 }
 
 /// Index iOS storyboard and XIB files for class usages
-pub fn index_storyboard_usages(conn: &mut Connection, root: &Path, progress: bool) -> Result<usize> {
-    use ignore::WalkBuilder;
-
+pub fn index_storyboard_usages(conn: &mut Connection, root: &Path, storyboard_files: &[PathBuf], progress: bool) -> Result<usize> {
     let module_lookup = ModuleLookup::from_db(conn)?;
 
     // Regex for customClass in storyboards/xibs
@@ -1366,22 +1386,6 @@ pub fn index_storyboard_usages(conn: &mut Connection, root: &Path, progress: boo
     static STORYBOARD_ID_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?:storyboardIdentifier|identifier)\s*=\s*["']([^"']+)["']"#).unwrap());
 
     let storyboard_id_re = &*STORYBOARD_ID_RE;
-
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
-        .git_ignore(has_git_repo(root))
-        .filter_entry(|entry| !is_excluded_dir(entry))
-        .build();
-
-    let storyboard_files: Vec<PathBuf> = walker
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let path = e.path();
-            let ext = path.extension().and_then(|e| e.to_str());
-            matches!(ext, Some("storyboard") | Some("xib"))
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect();
 
     if progress {
         eprintln!("Found {} storyboard/xib files to index...", storyboard_files.len());
@@ -1398,7 +1402,7 @@ pub fn index_storyboard_usages(conn: &mut Connection, root: &Path, progress: boo
             "INSERT INTO storyboard_usages (module_id, file_path, line, class_name, usage_type, storyboard_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
         )?;
 
-        for sb_path in &storyboard_files {
+        for sb_path in storyboard_files {
             let rel_path = sb_path
                 .strip_prefix(root)
                 .unwrap_or(sb_path)
@@ -1490,26 +1494,10 @@ impl IosAssetType {
 }
 
 /// Index iOS Assets.xcassets
-pub fn index_ios_assets(conn: &mut Connection, root: &Path, progress: bool) -> Result<(usize, usize)> {
+pub fn index_ios_assets(conn: &mut Connection, root: &Path, xcassets_dirs: &[PathBuf], progress: bool) -> Result<(usize, usize)> {
     use ignore::WalkBuilder;
 
     let module_lookup = ModuleLookup::from_db(conn)?;
-
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
-        .git_ignore(has_git_repo(root))
-        .filter_entry(|entry| !is_excluded_dir(entry))
-        .build();
-
-    // Find all .xcassets directories
-    let xcassets_dirs: Vec<PathBuf> = walker
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let path = e.path();
-            path.is_dir() && path.extension().map(|e| e == "xcassets").unwrap_or(false)
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect();
 
     if progress {
         eprintln!("Found {} .xcassets directories...", xcassets_dirs.len());
@@ -1530,7 +1518,7 @@ pub fn index_ios_assets(conn: &mut Connection, root: &Path, progress: bool) -> R
         )?;
 
         // Index assets from .xcassets directories
-        for xcassets_dir in &xcassets_dirs {
+        for xcassets_dir in xcassets_dirs {
             let rel_xcassets = xcassets_dir
                 .strip_prefix(root)
                 .unwrap_or(xcassets_dir)
@@ -1602,26 +1590,15 @@ pub fn index_ios_assets(conn: &mut Connection, root: &Path, progress: bool) -> R
             "INSERT INTO ios_asset_usages (asset_id, usage_file, usage_line, usage_type) VALUES (?1, ?2, ?3, ?4)"
         )?;
 
-        let walker = WalkBuilder::new(root)
-            .hidden(true)
-            .git_ignore(has_git_repo(root))
-            .filter_entry(|entry| !is_excluded_dir(entry))
-            .build();
+        // Query swift files from DB instead of walking filesystem again
+        let swift_rel_paths: Vec<String> = {
+            let mut stmt = tx.prepare("SELECT path FROM files WHERE path LIKE '%.swift'")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
 
-        let swift_files: Vec<PathBuf> = walker
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path().extension().map(|ext| ext == "swift").unwrap_or(false)
-            })
-            .map(|e| e.path().to_path_buf())
-            .collect();
-
-        for file_path in &swift_files {
-            let rel_path = file_path
-                .strip_prefix(root)
-                .unwrap_or(file_path)
-                .to_string_lossy()
-                .to_string();
+        for rel_path in &swift_rel_paths {
+            let file_path = root.join(rel_path);
 
             if let Ok(content) = fs::read_to_string(file_path) {
                 for (line_num, line) in content.lines().enumerate() {

@@ -88,17 +88,18 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
     match index_type {
         "all" => {
             println!("{}", "Rebuilding full index...".cyan());
-            let (mut file_count, module_files) = indexer::index_directory(&mut conn, root, true, no_ignore)?;
-            let module_count = indexer::index_modules_from_files(&conn, root, &module_files)?;
+            let walk = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            let mut file_count = walk.file_count;
+            let module_count = indexer::index_modules_from_files(&conn, root, &walk.module_files)?;
 
             // Index extra roots
             let extra_roots = db::get_extra_roots(&conn)?;
             for extra_root in &extra_roots {
                 let extra_path = std::path::Path::new(extra_root);
                 if extra_path.exists() {
-                    let (extra_files, _) = indexer::index_directory(&mut conn, extra_path, true, no_ignore)?;
-                    file_count += extra_files;
-                    println!("{}", format!("Indexed {} files from extra root: {}", extra_files, extra_root).dimmed());
+                    let extra_walk = indexer::index_directory(&mut conn, extra_path, true, no_ignore)?;
+                    file_count += extra_walk.file_count;
+                    println!("{}", format!("Indexed {} files from extra root: {}", extra_walk.file_count, extra_root).dimmed());
                 }
             }
 
@@ -138,10 +139,10 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             let mut asset_usage_count = 0;
             if is_ios {
                 println!("{}", "Indexing storyboards/xibs...".cyan());
-                sb_count = indexer::index_storyboard_usages(&mut conn, root, true)?;
+                sb_count = indexer::index_storyboard_usages(&mut conn, root, &walk.storyboard_files, true)?;
 
                 println!("{}", "Indexing iOS assets...".cyan());
-                let (ac, auc) = indexer::index_ios_assets(&mut conn, root, true)?;
+                let (ac, auc) = indexer::index_ios_assets(&mut conn, root, &walk.xcassets_dirs, true)?;
                 asset_count = ac;
                 asset_usage_count = auc;
             }
@@ -177,8 +178,8 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             println!("{}", "Rebuilding symbols index...".cyan());
             conn.execute("DELETE FROM symbols", [])?;
             conn.execute("DELETE FROM files", [])?;
-            let (file_count, _) = indexer::index_directory(&mut conn, root, true, no_ignore)?;
-            println!("{}", format!("Indexed {} files", file_count).green());
+            let walk = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            println!("{}", format!("Indexed {} files", walk.file_count).green());
         }
         "modules" => {
             println!("{}", "Rebuilding modules index...".cyan());
