@@ -1,2 +1,4 @@
 /target
 .claude/
+dist/
+mobile-tools/target/
