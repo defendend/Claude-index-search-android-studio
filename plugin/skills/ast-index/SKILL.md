@@ -88,6 +88,8 @@ ast-index conventions --format json
 ```bash
 ast-index search "Payment"           # Finds files, classes, functions matching "Payment"
 ast-index search "ViewModel"         # Returns files, symbols, modules in ranked order
+ast-index search "Store" --fuzzy     # Fuzzy: exact → prefix → contains matching
+ast-index search "Handler" --module "core/"  # Search within a module
 ```
 
 ### File Search
@@ -106,6 +108,8 @@ ast-index file "ViewController"      # Find iOS view controllers
 ```bash
 ast-index symbol "PaymentInteractor" # Find exact symbol
 ast-index symbol "Presenter"         # Find all presenters
+ast-index symbol "Store" --fuzzy     # Fuzzy: exact → prefix (Store*) → contains (*Store*)
+ast-index symbol "Mapper" --in-file "payments/" --limit 10  # Scoped search
 ```
 
 ### Class Search
@@ -115,6 +119,8 @@ ast-index symbol "Presenter"         # Find all presenters
 ```bash
 ast-index class "BaseFragment"       # Find Android base fragment
 ast-index class "UIViewController"   # Find iOS view controller subclass
+ast-index class "Store" --fuzzy      # Find all classes containing "Store"
+ast-index class "Repository" --module "features/payments"  # Filter by module
 ```
 
 ### Usage Search
@@ -124,6 +130,8 @@ ast-index class "UIViewController"   # Find iOS view controller subclass
 ```bash
 ast-index usages "PaymentRepository" # Find all usages of repository
 ast-index usages "onClick"           # Find all click handler usages
+ast-index usages "fetchData" --in-file "src/api/"  # Scoped to file path
+ast-index usages "Repository" --module "features/auth" --limit 100
 ```
 
 Performance: ~8ms for indexed symbols.
@@ -144,6 +152,7 @@ ast-index refs "BaseFragment" --limit 10  # Limit results per section
 ```bash
 ast-index implementations "BasePresenter"  # Find all presenter implementations
 ast-index implementations "Repository"     # Find repository implementations
+ast-index implementations "ViewModel" --module "features/"  # Scoped to module
 ```
 
 ### Class Hierarchy
@@ -270,21 +279,32 @@ Detects:
 - **Frameworks**: DI (Hilt, Dagger, Koin), Async (Coroutines, RxJava, Combine), Network (Retrofit, OkHttp), DB (Room, Realm), UI (Compose, SwiftUI, React, Flutter), Testing (JUnit, Kotest, XCTest, pytest, Jest)
 - **Naming patterns**: ViewModel, Repository, UseCase, Service, Controller, Fragment, etc. (with counts)
 
+## Common Flags
+
+Most search commands (`search`, `symbol`, `class`, `usages`, `implementations`) support:
+
+| Flag | Description |
+|------|-------------|
+| `--fuzzy` | Fuzzy search: exact match → prefix match → contains match |
+| `--in-file <PATH>` | Filter results by file path (substring match) |
+| `--module <PATH>` | Filter results by module path (substring match) |
+| `--limit <N>` | Max results to return |
+| `--format json` | JSON output for structured processing |
+
+**When to use `--fuzzy`:** When you don't know the exact name. `ast-index class "Store" --fuzzy` finds `Store`, `StoreImpl`, `AppStore`, `DataStoreRepository`, etc.
+
 ## Index Management
 
 ```bash
 ast-index init                           # Initialize index for current project
-```
-
-```bash
-ast-index rebuild                    # Full rebuild with dependencies
-ast-index rebuild --no-deps          # Skip module dependency indexing
-ast-index rebuild --no-ignore        # Include gitignored files
-ast-index update                     # Incremental update
-ast-index stats                      # Show index statistics
-ast-index clear                      # Delete index for current project
-ast-index restore /path/to/index.db  # Restore index from a .db file
-ast-index watch                      # Watch for file changes and auto-update index
+ast-index rebuild                        # Full rebuild with dependencies
+ast-index rebuild --no-deps              # Skip module dependency indexing
+ast-index rebuild --no-ignore            # Include gitignored files (build/, etc.)
+ast-index update                         # Incremental update (changed files only)
+ast-index stats                          # Show index statistics
+ast-index clear                          # Delete index for current project
+ast-index restore /path/to/index.db      # Restore index from a .db file
+ast-index watch                          # Watch for file changes and auto-update index
 ```
 
 ## Multi-Root Projects
