@@ -438,10 +438,16 @@ fn escape_fts5_query(query: &str) -> String {
     if query.trim().is_empty() {
         return String::new();
     }
+    // Check for prefix operator: * must stay OUTSIDE quotes for FTS5
+    let (term, suffix) = if query.ends_with('*') {
+        (&query[..query.len() - 1], "*")
+    } else {
+        (query, "")
+    };
     // Wrap in double quotes to treat as literal phrase
     // Escape any existing double quotes
-    let escaped = query.replace('"', "\"\"");
-    format!("\"{}\"", escaped)
+    let escaped = term.replace('"', "\"\"");
+    format!("\"{}\"{}",  escaped, suffix)
 }
 
 /// Search symbols by name (FTS5)
@@ -1186,6 +1192,12 @@ mod tests {
     #[test]
     fn test_escape_fts5_query_simple() {
         assert_eq!(escape_fts5_query("MyClass"), "\"MyClass\"");
+    }
+
+    #[test]
+    fn test_escape_fts5_query_prefix() {
+        assert_eq!(escape_fts5_query("Slow*"), "\"Slow\"*");
+        assert_eq!(escape_fts5_query("SlowUpstream*"), "\"SlowUpstream\"*");
     }
 
     #[test]

@@ -235,11 +235,17 @@ pub fn cmd_provides(root: &Path, type_name: &str, limit: usize) -> Result<()> {
 
     // Walk files and search with context
     use ignore::WalkBuilder;
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
-        .git_ignore(crate::indexer::has_git_repo(root))
-        .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
-        .build();
+    let is_git = crate::indexer::has_git_repo(root);
+    let is_arc = crate::indexer::has_arc_repo(root);
+    let mut wb = WalkBuilder::new(root);
+    wb.hidden(true)
+        .git_ignore(is_git)
+        .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry));
+    if is_arc {
+        wb.add_custom_ignore_filename(".gitignore");
+        wb.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = wb.build();
 
     for entry in walker.filter_map(|e| e.ok()) {
         if results.len() >= limit {

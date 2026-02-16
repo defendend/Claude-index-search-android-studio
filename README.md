@@ -1,4 +1,4 @@
-# ast-index v3.16.2
+# ast-index v3.16.3
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.16.3
+- **FTS5 prefix search fix** — `search` no longer crashes on queries like `SlowUpstream`; prefix `*` operator now correctly placed outside FTS5 quotes
+- **Arc VCS support** — `rebuild`/`search`/`grep` now respect `.gitignore` and `.arcignore` in Arc repositories, preventing hangs on large monorepos
+- **Fuzzy search fix** — `--fuzzy` flag now returns all matching results (exact + prefix + contains) instead of early-returning on exact match only
 
 ### 3.16.0
 - **`restore` command** — restore index from a `.db` file: `ast-index restore /path/to/index.db`

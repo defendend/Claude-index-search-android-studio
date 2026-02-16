@@ -293,6 +293,24 @@ pub fn has_git_repo(root: &Path) -> bool {
     root.join(".git").exists()
 }
 
+/// Check if root is inside an Arc repository (Yandex Arcadia monorepo).
+/// Searches up from root looking for .arc/HEAD, stops at $HOME.
+pub fn has_arc_repo(root: &Path) -> bool {
+    let home = dirs::home_dir();
+    let mut current = Some(root.to_path_buf());
+    while let Some(dir) = current {
+        if dir.join(".arc").join("HEAD").exists() {
+            return true;
+        }
+        // Stop at $HOME to avoid confusing ~/.arc (client storage) with repo marker
+        if home.as_ref().map(|h| h == &dir).unwrap_or(false) {
+            break;
+        }
+        current = dir.parent().map(|p| p.to_path_buf());
+    }
+    false
+}
+
 /// Check if a path component matches an excluded directory
 pub fn is_excluded_dir(entry: &ignore::DirEntry) -> bool {
     if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
@@ -339,14 +357,21 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
 
     // Collect all file paths (paths are lightweight, OK to keep in memory)
     let use_git = has_git_repo(root) && !no_ignore;
-    let walker = WalkBuilder::new(root)
+    let is_arc = has_arc_repo(root) && !no_ignore;
+    let mut builder = WalkBuilder::new(root);
+    builder
         .hidden(true)
         .follow_links(false)     // Never follow symlinks — prevents loops in monorepos
         .max_depth(Some(50))     // Prevent runaway traversal in deeply nested structures
         .git_ignore(use_git)     // Respect .gitignore only if .git exists
         .git_exclude(use_git)
-        .filter_entry(|entry| !is_excluded_dir(entry))
-        .build();
+        .filter_entry(|entry| !is_excluded_dir(entry));
+    // Arc repos: respect .gitignore and .arcignore without .git directory
+    if is_arc {
+        builder.add_custom_ignore_filename(".gitignore");
+        builder.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = builder.build();
 
     let mut files: Vec<PathBuf> = Vec::new();
     let mut module_files: Vec<PathBuf> = Vec::new();
@@ -526,11 +551,18 @@ pub fn update_directory_incremental(conn: &mut Connection, root: &Path, progress
     }
 
     // 2. Walk filesystem and collect files to update
-    let walker = WalkBuilder::new(root)
+    let is_git = has_git_repo(root);
+    let is_arc = has_arc_repo(root);
+    let mut builder = WalkBuilder::new(root);
+    builder
         .hidden(true)
-        .git_ignore(has_git_repo(root))
-        .filter_entry(|entry| !is_excluded_dir(entry))
-        .build();
+        .git_ignore(is_git)
+        .filter_entry(|entry| !is_excluded_dir(entry));
+    if is_arc {
+        builder.add_custom_ignore_filename(".gitignore");
+        builder.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = builder.build();
 
     let current_files: Vec<PathBuf> = walker
         .filter_map(|e| e.ok())
@@ -635,11 +667,18 @@ pub fn update_directory_incremental(conn: &mut Connection, root: &Path, progress
 pub fn index_modules(conn: &Connection, root: &Path) -> Result<usize> {
     use ignore::WalkBuilder;
 
-    let walker = WalkBuilder::new(root)
+    let is_git = has_git_repo(root);
+    let is_arc = has_arc_repo(root);
+    let mut builder = WalkBuilder::new(root);
+    builder
         .hidden(true)
-        .git_ignore(has_git_repo(root))
-        .filter_entry(|entry| !is_excluded_dir(entry))
-        .build();
+        .git_ignore(is_git)
+        .filter_entry(|entry| !is_excluded_dir(entry));
+    if is_arc {
+        builder.add_custom_ignore_filename(".gitignore");
+        builder.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = builder.build();
 
     let files: Vec<PathBuf> = walker
         .filter_map(|e| e.ok())

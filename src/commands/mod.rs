@@ -72,14 +72,19 @@ where
     let matcher = RegexMatcher::new(pattern).context("Invalid regex pattern")?;
     let no_ignore = is_no_ignore_enabled(root);
     let use_git = crate::indexer::has_git_repo(root) && !no_ignore;
+    let is_arc = crate::indexer::has_arc_repo(root) && !no_ignore;
 
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
+    let mut wb = WalkBuilder::new(root);
+    wb.hidden(true)
         .git_ignore(use_git)
         .git_exclude(use_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
-        .threads(num_cpus())
-        .build_parallel();
+        .threads(num_cpus());
+    if is_arc {
+        wb.add_custom_ignore_filename(".gitignore");
+        wb.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = wb.build_parallel();
 
     // Use crossbeam for faster channel (bounded to prevent memory bloat)
     let (tx, rx) = channel::bounded::<(Arc<Path>, usize, String)>(10000);
@@ -147,14 +152,19 @@ where
     let matcher = RegexMatcher::new(pattern).context("Invalid regex pattern")?;
     let no_ignore = is_no_ignore_enabled(root);
     let use_git = crate::indexer::has_git_repo(root) && !no_ignore;
+    let is_arc = crate::indexer::has_arc_repo(root) && !no_ignore;
 
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
+    let mut wb = WalkBuilder::new(root);
+    wb.hidden(true)
         .git_ignore(use_git)
         .git_exclude(use_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
-        .threads(num_cpus())
-        .build_parallel();
+        .threads(num_cpus());
+    if is_arc {
+        wb.add_custom_ignore_filename(".gitignore");
+        wb.add_custom_ignore_filename(".arcignore");
+    }
+    let walker = wb.build_parallel();
 
     let (tx, rx) = channel::bounded::<(Arc<Path>, usize, String)>(limit.max(1000));
 
