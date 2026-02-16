@@ -1,4 +1,4 @@
-# ast-index v3.15.0
+# ast-index v3.16.0
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.16.0
+- **`restore` command** — restore index from a `.db` file: `ast-index restore /path/to/index.db`
 
 ### 3.15.0
 - **TypeScript class members** — index class methods (constructor, getters/setters, static, async), fields/properties, private `#members`, and abstract methods; object literal methods correctly excluded

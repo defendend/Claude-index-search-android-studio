@@ -250,6 +250,60 @@ pub fn cmd_update(root: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Restore index from a .db file
+pub fn cmd_restore(root: &Path, db_file: &str) -> Result<()> {
+    let src = std::path::Path::new(db_file);
+
+    if !src.exists() {
+        anyhow::bail!("File not found: {}", db_file);
+    }
+    if !src.is_file() {
+        anyhow::bail!("Not a file: {}", db_file);
+    }
+
+    let dest = db::get_db_path(root)?;
+    let dest_dir = dest.parent().unwrap();
+    std::fs::create_dir_all(dest_dir)?;
+
+    // Remove existing DB files if present
+    if db::db_exists(root) {
+        db::delete_db(root)?;
+    }
+
+    std::fs::copy(src, &dest)?;
+
+    // Copy WAL/SHM if they exist alongside the source
+    for suffix in ["-wal", "-shm"] {
+        let src_extra = src.with_extension(format!("db{}", suffix));
+        if src_extra.exists() {
+            let dest_extra = dest.with_extension(format!("db{}", suffix));
+            std::fs::copy(&src_extra, &dest_extra)?;
+        }
+    }
+
+    // Update project_root metadata to match current project
+    let conn = db::open_db(root)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO metadata (key, value) VALUES ('project_root', ?1)",
+        [root.to_string_lossy().as_ref()],
+    )?;
+
+    println!("{}", format!("Restored index from: {}", db_file).green());
+    println!("DB path: {}", dest.display());
+
+    // Show quick stats
+    let stats = db::get_stats(&conn)?;
+    println!(
+        "{}",
+        format!(
+            "Contains: {} files, {} symbols, {} refs",
+            stats.file_count, stats.symbol_count, stats.refs_count
+        ).dimmed()
+    );
+
+    Ok(())
+}
+
 /// Clear index database for current project
 pub fn cmd_clear(root: &Path) -> Result<()> {
     db::delete_db(root)?;

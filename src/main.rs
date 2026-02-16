@@ -239,6 +239,11 @@ enum Commands {
     },
     /// Update index (incremental)
     Update,
+    /// Restore index from a .db file
+    Restore {
+        /// Path to the .db file to restore
+        path: String,
+    },
     /// Show index statistics
     Stats,
     /// Universal search (files + symbols)
@@ -606,6 +611,7 @@ fn main() -> Result<()> {
         Commands::Init => commands::management::cmd_init(&root),
         Commands::Rebuild { r#type, no_deps, no_ignore } => commands::management::cmd_rebuild(&root, &r#type, !no_deps, no_ignore),
         Commands::Update => commands::management::cmd_update(&root),
+        Commands::Restore { path } => commands::management::cmd_restore(&root, &path),
         Commands::Stats => commands::management::cmd_stats(&root, format),
         // Index commands
         Commands::Search { query, limit, in_file, module, fuzzy } => {
