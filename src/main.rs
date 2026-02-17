@@ -769,8 +769,8 @@ fn cmd_install_claude_plugin() -> Result<()> {
 fn find_project_root() -> Result<PathBuf> {
     let cwd = std::env::current_dir()?;
     for ancestor in cwd.ancestors() {
-        // ast-index marker (created by rebuild)
-        if ancestor.join(".ast-index-root").exists() {
+        // Check if an index DB already exists for this ancestor
+        if db::db_exists(ancestor) {
             return Ok(ancestor.to_path_buf());
         }
         // Android/Gradle markers

@@ -311,7 +311,7 @@ ast-index watch                          # Watch for file changes and auto-updat
 
 ### Directory-Scoped Search
 
-`rebuild` creates a `.ast-index-root` marker file in the project root. When running search from a subdirectory, results are automatically limited to that subtree:
+When running search from a subdirectory, results are automatically limited to that subtree (the index DB in cache is used to detect the project root):
 
 ```bash
 cd /project/root

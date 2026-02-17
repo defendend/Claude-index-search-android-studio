@@ -14,13 +14,6 @@ use colored::Colorize;
 use crate::db;
 use crate::indexer;
 
-/// Create .ast-index-root marker so subdirectories can find the project root
-fn create_root_marker(root: &Path) {
-    let marker = root.join(".ast-index-root");
-    if !marker.exists() {
-        std::fs::write(&marker, "").ok();
-    }
-}
 
 /// File count threshold for auto-switching to sub-projects mode
 const AUTO_SUB_PROJECTS_THRESHOLD: usize = 65_000;
@@ -282,7 +275,6 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
         }
     }
 
-    create_root_marker(root);
     eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
@@ -374,7 +366,6 @@ fn cmd_rebuild_sub_projects(root: &Path, _index_type: &str, _index_deps: bool, n
             success_count, total_files, fail_count
         ).green()
     );
-    create_root_marker(root);
     eprintln!("{}", format!("Total time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
@@ -472,10 +463,6 @@ pub fn cmd_restore(root: &Path, db_file: &str) -> Result<()> {
 /// Clear index database for current project
 pub fn cmd_clear(root: &Path) -> Result<()> {
     db::delete_db(root)?;
-    let marker = root.join(".ast-index-root");
-    if marker.exists() {
-        std::fs::remove_file(&marker).ok();
-    }
     println!("Index cleared for {}", root.display());
     Ok(())
 }
