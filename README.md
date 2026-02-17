@@ -1,4 +1,4 @@
-# ast-index v3.17.0
+# ast-index v3.17.1
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.17.1
+- **`--verbose` flag for rebuild** — detailed timing logs for every step (walk, parse, DB write, lock, modules, deps) to diagnose performance issues
+- **Removed `init` command** — `rebuild` creates DB from scratch, `init` was redundant
+- **SQLite concurrent safety** — `busy_timeout = 5000ms` prevents "database locked" errors; file lock prevents concurrent rebuilds on same project
 
 ### 3.17.0
 - **Auto sub-projects mode** — `rebuild` automatically switches to sub-projects indexing when directory has 65K+ source files and 2+ sub-project directories

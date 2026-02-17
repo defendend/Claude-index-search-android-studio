@@ -18,7 +18,6 @@ use std::path::PathBuf;
 {usage-heading} {usage}
 
 Index Management:
-  init                   Initialize index for current project
   rebuild                Rebuild index (full reindex)
   update                 Update index (incremental)
   stats                  Show index statistics
@@ -223,8 +222,6 @@ enum Commands {
         limit: usize,
     },
     // === Index Commands ===
-    /// Initialize index for current project
-    Init,
     /// Rebuild index (full reindex)
     Rebuild {
         /// Index type: files, symbols, modules, or all
@@ -239,6 +236,9 @@ enum Commands {
         /// Index each sub-project separately (for large monorepo directories)
         #[arg(long)]
         sub_projects: bool,
+        /// Verbose logging with timing for each step
+        #[arg(long, short)]
+        verbose: bool,
     },
     /// Update index (incremental)
     Update,
@@ -611,8 +611,7 @@ fn main() -> Result<()> {
         Commands::Flows { query, limit } => commands::grep::cmd_flows(&root, query.as_deref(), limit),
         Commands::Previews { query, limit } => commands::grep::cmd_previews(&root, query.as_deref(), limit),
         // Management commands
-        Commands::Init => commands::management::cmd_init(&root),
-        Commands::Rebuild { r#type, no_deps, no_ignore, sub_projects } => commands::management::cmd_rebuild(&root, &r#type, !no_deps, no_ignore, sub_projects),
+        Commands::Rebuild { r#type, no_deps, no_ignore, sub_projects, verbose } => commands::management::cmd_rebuild(&root, &r#type, !no_deps, no_ignore, sub_projects, verbose),
         Commands::Update => commands::management::cmd_update(&root),
         Commands::Restore { path } => commands::management::cmd_restore(&root, &path),
         Commands::Stats => commands::management::cmd_stats(&root, format),

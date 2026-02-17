@@ -438,6 +438,9 @@ pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ig
 pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Path, progress: bool, no_ignore: bool) -> Result<WalkResult> {
     use ignore::WalkBuilder;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Instant;
+
+    let verbose = std::env::var("AST_INDEX_VERBOSE").is_ok();
 
     // Small chunks: parse CHUNK_SIZE files in parallel → write to DB → free memory → next chunk
     // Peak memory: ~CHUNK_SIZE × (file content + ParsedFile), then freed each iteration
@@ -450,9 +453,16 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
     }
 
     // Collect all file paths (paths are lightweight, OK to keep in memory)
+    if verbose { eprintln!("[verbose] checking git repo: walk_dir={}", walk_dir.display()); }
+    let t = Instant::now();
     let use_git = has_git_repo(walk_dir) || has_git_repo(root);
     let use_git = use_git && !no_ignore;
+    if verbose { eprintln!("[verbose] has_git_repo: {} in {:?}", use_git, t.elapsed()); }
+
+    let t = Instant::now();
     let arc_root = if no_ignore { None } else { find_arc_root(walk_dir).or_else(|| find_arc_root(root)) };
+    if verbose { eprintln!("[verbose] find_arc_root: {:?} in {:?}", arc_root.as_ref().map(|p| p.display().to_string()), t.elapsed()); }
+
     let mut builder = WalkBuilder::new(walk_dir);
     builder
         .hidden(true)
@@ -463,14 +473,19 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
         .filter_entry(|entry| !is_excluded_dir(entry));
     // Arc repos: respect .gitignore and .arcignore without .git directory
     if let Some(ref arc) = arc_root {
+        if verbose { eprintln!("[verbose] arc mode: adding .gitignore + .arcignore custom ignore filenames"); }
         builder.add_custom_ignore_filename(".gitignore");
         builder.add_custom_ignore_filename(".arcignore");
         // Add root .gitignore from arc repo root (may be above walk root)
         let root_gitignore = arc.join(".gitignore");
         if root_gitignore.exists() {
+            if verbose { eprintln!("[verbose] adding root .gitignore: {}", root_gitignore.display()); }
             builder.add_ignore(root_gitignore);
         }
     }
+
+    if verbose { eprintln!("[verbose] starting file walk..."); }
+    let walk_start = Instant::now();
     let walker = builder.build();
 
     let mut files: Vec<PathBuf> = Vec::new();
@@ -480,7 +495,12 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
     let mut xml_layout_files: Vec<PathBuf> = Vec::new();
     let mut res_files: Vec<PathBuf> = Vec::new();
 
+    let mut walk_entries = 0usize;
     for entry in walker.filter_map(|e| e.ok()) {
+        walk_entries += 1;
+        if verbose && walk_entries % 10000 == 0 {
+            eprintln!("[verbose] walk: {} entries scanned in {:?}...", walk_entries, walk_start.elapsed());
+        }
         let path = entry.path();
         // Collect module-related files for index_modules
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
@@ -513,6 +533,11 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
         }
     }
 
+    if verbose {
+        eprintln!("[verbose] walk complete: {} total entries, {} source files, {} module files in {:?}",
+            walk_entries, files.len(), module_files.len(), walk_start.elapsed());
+    }
+
     let total_files = files.len();
     if progress {
         eprintln!("Found {} files to parse...", total_files);
@@ -525,16 +550,21 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
     let num_threads = std::thread::available_parallelism()
         .map(|n| n.get().min(8))
         .unwrap_or(4);
+    if verbose { eprintln!("[verbose] using {} threads for parsing", num_threads); }
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to build thread pool: {}", e))?;
 
     let root_buf = root.to_path_buf();
-    for (_chunk_idx, chunk) in files.chunks(CHUNK_SIZE).enumerate() {
+    let total_chunks = (files.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    for (chunk_idx, chunk) in files.chunks(CHUNK_SIZE).enumerate() {
         let root_clone = root_buf.clone();
         let counter = parsed_global.clone();
         let total = total_files;
+
+        if verbose { eprintln!("[verbose] chunk {}/{}: parsing {} files...", chunk_idx + 1, total_chunks, chunk.len()); }
+        let chunk_start = Instant::now();
 
         // Parse chunk in parallel — at most CHUNK_SIZE ParsedFiles in memory
         let parsed_files: Vec<ParsedFile> = pool.install(|| {
@@ -551,8 +581,13 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
                 .collect()
         });
 
+        if verbose { eprintln!("[verbose] chunk {}/{}: parsed in {:?}, writing {} to DB...", chunk_idx + 1, total_chunks, chunk_start.elapsed(), parsed_files.len()); }
+        let write_start = Instant::now();
+
         // Write to DB and free parsed_files
         write_batch_to_db(conn, parsed_files, &mut total_count)?;
+
+        if verbose { eprintln!("[verbose] chunk {}/{}: written in {:?}", chunk_idx + 1, total_chunks, write_start.elapsed()); }
 
         if progress {
             eprintln!("Written {} / {} files to DB...", total_count, total_files);
