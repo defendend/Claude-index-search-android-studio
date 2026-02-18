@@ -121,7 +121,7 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
     }
 
     // Detect project type — check actual platform markers for Mixed projects
-    let project_type = indexer::detect_project_type(root);
+    let _project_type = indexer::detect_project_type(root);
     let is_ios = indexer::has_ios_markers(root);
     let is_android = indexer::has_android_markers(root);
 
@@ -134,11 +134,10 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             let mut file_count = walk.file_count;
             if verbose { eprintln!("[verbose] index_directory: {} files in {:?}", file_count, t.elapsed()); }
 
-            let t = Instant::now();
-            let module_count = indexer::index_modules_from_files(&conn, root, &walk.module_files)?;
-            if verbose { eprintln!("[verbose] index_modules: {} modules in {:?}", module_count, t.elapsed()); }
+            // Collect module_files from primary root
+            let mut all_module_files = walk.module_files;
 
-            // Index extra roots
+            // Index extra roots and merge their module_files
             let extra_roots = db::get_extra_roots(&conn)?;
             for extra_root in &extra_roots {
                 let extra_path = std::path::Path::new(extra_root);
@@ -147,10 +146,15 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
                     let t = Instant::now();
                     let extra_walk = indexer::index_directory(&mut conn, extra_path, true, no_ignore)?;
                     file_count += extra_walk.file_count;
+                    all_module_files.extend(extra_walk.module_files);
                     if verbose { eprintln!("[verbose] extra root: {} files in {:?}", extra_walk.file_count, t.elapsed()); }
                     println!("{}", format!("Indexed {} files from extra root: {}", extra_walk.file_count, extra_root).dimmed());
                 }
             }
+
+            let t = Instant::now();
+            let module_count = indexer::index_modules_from_files(&conn, root, &all_module_files)?;
+            if verbose { eprintln!("[verbose] index_modules: {} modules in {:?}", module_count, t.elapsed()); }
 
             // Index CocoaPods/Carthage for iOS
             if is_ios {
@@ -165,11 +169,14 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
 
             let mut dep_count = 0;
             let mut trans_count = 0;
-            if index_deps && is_android {
+            let any_has_deps = is_android || extra_roots.iter().any(|r| {
+                indexer::has_android_markers(std::path::Path::new(r))
+            });
+            if index_deps && any_has_deps {
                 println!("{}", "Indexing module dependencies...".cyan());
                 if verbose { eprintln!("[verbose] indexing module deps..."); }
                 let t = Instant::now();
-                dep_count = indexer::index_module_dependencies(&mut conn, root, &walk.module_files, true)?;
+                dep_count = indexer::index_module_dependencies(&mut conn, root, &all_module_files, true)?;
                 if verbose { eprintln!("[verbose] module_deps: {} in {:?}", dep_count, t.elapsed()); }
                 let t = Instant::now();
                 trans_count = indexer::build_transitive_deps(&mut conn, true)?;
@@ -533,7 +540,7 @@ pub fn cmd_stats(root: &Path, format: &str) -> Result<()> {
 }
 
 /// Add an extra source root
-pub fn cmd_add_root(root: &Path, path: &str) -> Result<()> {
+pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
     if !db::db_exists(root) {
         println!(
             "{}",
@@ -548,6 +555,31 @@ pub fn cmd_add_root(root: &Path, path: &str) -> Result<()> {
         let cwd = std::env::current_dir()?;
         cwd.join(path).to_string_lossy().to_string()
     };
+
+    // Overlap validation
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_new = std::path::Path::new(&abs_path)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&abs_path));
+
+    if !force {
+        if canonical_new.starts_with(&canonical_root) {
+            println!("{}", format!(
+                "Warning: '{}' is inside the project root '{}'. Files will be indexed twice.",
+                abs_path, root.display()
+            ).yellow());
+            println!("Use --force to add anyway, or use directory scoping instead.");
+            return Ok(());
+        }
+        if canonical_root.starts_with(&canonical_new) {
+            println!("{}", format!(
+                "Warning: '{}' is a parent of the project root. This will cause massive duplication.",
+                abs_path
+            ).yellow());
+            println!("Use --force to add anyway.");
+            return Ok(());
+        }
+    }
 
     let conn = db::open_db(root)?;
     db::add_extra_root(&conn, &abs_path)?;

@@ -88,7 +88,7 @@ pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()>
     );
     // Skip definitions in Kotlin/Java/Swift/Perl
     let def_pattern = Regex::new(&format!(
-        r"\b(?:fun|func|def|sub)\s+{fn}\s*[<({{\[]|\b(?:void|int|long|boolean|char|byte|short|float|double|String|Object|List|Map|Set|Optional|CompletableFuture|\w+(?:<[^>]*>)?)\s+{fn}\s*\(",
+        r"\b(?:fun|func|def|sub)\s+{fn}\s*[<({{\[]|\b(?:(?:public|private|protected|static|final|abstract|synchronized|override)\s+)*(?:void|int|long|boolean|char|byte|short|float|double|[\w.]+(?:<[^{{;]*>)?(?:\[\])*)\s+{fn}\s*\(",
         fn = function_name
     ))?;
 
@@ -177,14 +177,15 @@ fn find_caller_functions(root: &Path, function_name: &str, limit: usize) -> Resu
         fn_name = function_name
     );
     let def_pattern = Regex::new(&format!(
-        r"\b(?:fun|func|def|sub)\s+{fn}\s*[<({{\[]|\b(?:void|int|long|boolean|char|byte|short|float|double|String|Object|List|Map|Set|Optional|CompletableFuture|\w+(?:<[^>]*>)?)\s+{fn}\s*\(",
+        r"\b(?:fun|func|def|sub)\s+{fn}\s*[<({{\[]|\b(?:(?:public|private|protected|static|final|abstract|synchronized|override)\s+)*(?:void|int|long|boolean|char|byte|short|float|double|[\w.]+(?:<[^{{;]*>)?(?:\[\])*)\s+{fn}\s*\(",
         fn = function_name
     ))?;
 
     // Pattern to find function definitions (for locating the containing function)
     // Group 1: fun/func/def/sub style, Group 2: Java return-type style
+    // Uses <[^{;]*> instead of <[^>]*> to handle nested generics like Map<String, List<Integer>>
     let func_def_re = Regex::new(
-        r"(?:fun|func|def|sub)\s+(\w+)\s*[<(\[]|(?:void|int|long|boolean|char|byte|short|float|double|String|Object|\w+(?:<[^>]*>)?)\s+(\w+)\s*\("
+        r"(?:fun|func|def|sub)\s+(\w+)\s*[<(\[]|(?:(?:public|private|protected|static|final|abstract|synchronized|override)\s+)*(?:void|int|long|boolean|char|byte|short|float|double|[\w.]+(?:<[^{;]*>)?(?:\[\])*)\s+(\w+)\s*\("
     )?;
 
     let mut results: Vec<(String, String, usize)> = vec![];
@@ -366,36 +367,57 @@ pub fn cmd_suspend(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
 /// Find @Composable functions
 pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
     let start = Instant::now();
-    let pattern = r"@Composable";
-
-    let mut composables: Vec<(String, String, usize)> = vec![];
-    let mut pending_composable: Option<(PathBuf, usize)> = None;
     let func_regex = Regex::new(r"fun\s+(\w+)\s*\(")?;
 
-    // This is a simplified version - proper impl would need context
-    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
+    // Phase 1: find all .kt files containing @Composable
+    let mut file_set: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    search_files_limited(root, r"@Composable", &["kt"], 100_000, |path, _line_num, _line| {
+        file_set.insert(path.to_path_buf());
+    })?;
 
-        if line.contains("@Composable") {
-            pending_composable = Some((path.to_path_buf(), line_num));
-        }
+    // Phase 2: read each file and find @Composable + fun pairs (multi-line aware)
+    let mut composables: Vec<(String, String, usize)> = vec![];
+    let mut sorted_files: Vec<_> = file_set.into_iter().collect();
+    sorted_files.sort();
 
-        if pending_composable.is_some() {
-            if let Some(caps) = func_regex.captures(line) {
-                let func_name = caps.get(1).unwrap().as_str().to_string();
+    for file_path in &sorted_files {
+        let content = match std::fs::read_to_string(file_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
 
-                if let Some(q) = query {
-                    if !func_name.to_lowercase().contains(&q.to_lowercase()) {
-                        pending_composable = None;
-                        return;
+        let lines: Vec<&str> = content.lines().collect();
+        let mut i = 0;
+        while i < lines.len() {
+            if lines[i].contains("@Composable") {
+                // Look at current and next few lines for fun definition
+                for j in i..=(i + 5).min(lines.len() - 1) {
+                    if let Some(caps) = func_regex.captures(lines[j]) {
+                        let func_name = caps.get(1).unwrap().as_str().to_string();
+
+                        if let Some(q) = query {
+                            if !func_name.to_lowercase().contains(&q.to_lowercase()) {
+                                break;
+                            }
+                        }
+
+                        let rel_path = relative_path(root, file_path);
+                        composables.push((func_name, rel_path, j + 1));
+                        i = j;
+                        break;
                     }
                 }
-
-                let (p, ln) = pending_composable.take().unwrap();
-                let rel_path = relative_path(root, &p);
-                composables.push((func_name, rel_path, ln));
             }
+            i += 1;
         }
-    })?;
+
+        if composables.len() >= limit {
+            composables.truncate(limit);
+            break;
+        }
+    }
+
+    composables.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
 
     println!("{}", format!("@Composable functions ({}):", composables.len()).bold());
 
@@ -469,15 +491,16 @@ pub fn cmd_suppress(root: &Path, query: Option<&str>, limit: usize) -> Result<()
     Ok(())
 }
 
-/// Find @Inject points for a type
+/// Find @Inject/@Autowired points for a type
 pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
     let start = Instant::now();
-    let pattern = r"@Inject";
+    let pattern = r"@Inject|@Autowired";
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
     search_files_limited(root, pattern, &["kt", "java"], limit, |path, line_num, line| {
-        if !line.contains(type_name) && !line.contains("@Inject") {
+        let has_di = line.contains("@Inject") || line.contains("@Autowired");
+        if !line.contains(type_name) && !has_di {
             return;
         }
 
@@ -492,7 +515,7 @@ pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
         .take(limit)
         .collect();
 
-    println!("{}", format!("@Inject points for '{}' ({}):", type_name, filtered.len()).bold());
+    println!("{}", format!("Injection points for '{}' ({}):", type_name, filtered.len()).bold());
 
     for (path, line_num, content) in &filtered {
         println!("  {}:{}", path.cyan(), line_num);
@@ -645,34 +668,57 @@ pub fn cmd_flows(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
 /// Find @Preview functions
 pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
     let start = Instant::now();
-    let pattern = r"@Preview";
     let func_regex = Regex::new(r"fun\s+(\w+)\s*\(")?;
 
+    // Phase 1: find all .kt files containing @Preview
+    let mut file_set: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    search_files_limited(root, r"@Preview", &["kt"], 100_000, |path, _line_num, _line| {
+        file_set.insert(path.to_path_buf());
+    })?;
+
+    // Phase 2: read each file and find @Preview + fun pairs (multi-line aware)
     let mut items: Vec<(String, String, usize)> = vec![];
-    let mut pending_preview: Option<(PathBuf, usize)> = None;
+    let mut sorted_files: Vec<_> = file_set.into_iter().collect();
+    sorted_files.sort();
 
-    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
-        if line.contains("@Preview") {
-            pending_preview = Some((path.to_path_buf(), line_num));
-        }
+    for file_path in &sorted_files {
+        let content = match std::fs::read_to_string(file_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
 
-        if pending_preview.is_some() {
-            if let Some(caps) = func_regex.captures(line) {
-                let func_name = caps.get(1).unwrap().as_str().to_string();
+        let lines: Vec<&str> = content.lines().collect();
+        let mut i = 0;
+        while i < lines.len() {
+            if lines[i].contains("@Preview") {
+                // Look at current and next few lines for fun definition
+                for j in i..=(i + 5).min(lines.len() - 1) {
+                    if let Some(caps) = func_regex.captures(lines[j]) {
+                        let func_name = caps.get(1).unwrap().as_str().to_string();
 
-                if let Some(q) = query {
-                    if !func_name.to_lowercase().contains(&q.to_lowercase()) {
-                        pending_preview = None;
-                        return;
+                        if let Some(q) = query {
+                            if !func_name.to_lowercase().contains(&q.to_lowercase()) {
+                                break;
+                            }
+                        }
+
+                        let rel_path = relative_path(root, file_path);
+                        items.push((func_name, rel_path, j + 1));
+                        i = j;
+                        break;
                     }
                 }
-
-                let (p, ln) = pending_preview.take().unwrap();
-                let rel_path = relative_path(root, &p);
-                items.push((func_name, rel_path, ln));
             }
+            i += 1;
         }
-    })?;
+
+        if items.len() >= limit {
+            items.truncate(limit);
+            break;
+        }
+    }
+
+    items.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
 
     println!("{}", format!("@Preview functions ({}):", items.len()).bold());
 

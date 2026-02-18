@@ -1,4 +1,4 @@
-# ast-index v3.18.0
+# ast-index v3.18.2
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,18 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.18.2
+- **Fix `composables` returning 0 results** — `@Composable` and `fun` are typically on separate lines in Kotlin; rewritten to two-phase approach (find files, then multi-line scan) instead of single-line grep callback
+- **Fix `previews` returning 0 results** — same multi-line issue as `composables`
+
+### 3.18.1
+- **Tree-sitter outline for all languages** — `outline` command now delegates to tree-sitter for Java, TypeScript/JavaScript, Swift, Ruby, Rust, Scala, C#, Proto, ObjC (previously only Dart used tree-sitter, others fell through to Kotlin regex)
+- **Module dependencies for extra roots** — `rebuild` now merges module files from extra roots and checks them for build system markers; Maven (`pom.xml`) triggers dependency indexing
+- **Fix call-tree nested generics** — regex now handles `Map<String, List<Integer>>` correctly instead of breaking on inner `>`
+- **`inject` supports @Autowired** — `inject` command searches for both `@Inject` and `@Autowired` annotations (Spring DI)
+- **Partial matching in `implementations`** — `implementations "Service"` now finds implementations of `UserService`, `PaymentService`, etc. via contains matching with relevance ranking
+- **Overlap validation for `add-root`** — warns when adding a root inside or parent of project root; use `--force` to override
 
 ### 3.18.0
 - **Dedicated Java parser** — Java files now use `tree-sitter-java` instead of being routed through the Kotlin parser; indexes classes, interfaces, enums, methods, constructors, fields, and Spring annotations (`@RestController`, `@Service`, `@GetMapping`, etc.)

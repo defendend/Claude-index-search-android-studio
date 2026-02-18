@@ -673,21 +673,28 @@ pub fn find_implementations(
     parent_name: &str,
     limit: usize,
 ) -> Result<Vec<SearchResult>> {
-    // Match exact name OR names ending with .ParentName (for qualified names)
-    let pattern = format!("%.{}", parent_name);
+    // Match exact name, qualified suffix (%.Name), or contains (%Name%)
+    let suffix_pattern = format!("%.{}", parent_name);
+    let contains_pattern = format!("%{}%", parent_name);
     let mut stmt = conn.prepare(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
         FROM inheritance i
         JOIN symbols s ON i.child_id = s.id
         JOIN files f ON s.file_id = f.id
-        WHERE i.parent_name = ?1 OR i.parent_name LIKE ?2
-        LIMIT ?3
+        WHERE i.parent_name = ?1 OR i.parent_name LIKE ?2 OR i.parent_name LIKE ?3
+        ORDER BY
+            CASE
+                WHEN i.parent_name = ?1 THEN 0
+                WHEN i.parent_name LIKE ?2 THEN 1
+                ELSE 2
+            END, s.name
+        LIMIT ?4
         "#,
     )?;
 
     let results = stmt
-        .query_map(params![parent_name, pattern, limit as i64], |row| {
+        .query_map(params![parent_name, suffix_pattern, contains_pattern, limit as i64], |row| {
             Ok(SearchResult {
                 name: row.get(0)?,
                 kind: row.get(1)?,

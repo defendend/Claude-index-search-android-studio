@@ -152,11 +152,12 @@ ast-index refs "BaseFragment" --limit 10  # Limit results per section
 
 ### Implementation Search
 
-**`implementations`** - Find all classes that extend or implement a given class/interface/protocol.
+**`implementations`** - Find all classes that extend or implement a given class/interface/protocol. Supports partial name matching with relevance ranking (exact → suffix → contains).
 
 ```bash
 ast-index implementations "BasePresenter"  # Find all presenter implementations
-ast-index implementations "Repository"     # Find repository implementations
+ast-index implementations "Repository"     # Find repository implementations (exact match)
+ast-index implementations "Service"        # Partial: finds UserService, PaymentService impls too
 ast-index implementations "ViewModel" --module "features/"  # Scoped to module
 ```
 
@@ -194,10 +195,13 @@ ast-index call-tree "getUsers"       # Java: finds callers of getUsers() method
 ast-index imports "path/to/File.kt"  # Show Kotlin file imports
 ```
 
-**`outline`** - Show all symbols defined in a file.
+**`outline`** - Show all symbols defined in a file. Uses tree-sitter for accurate parsing of all supported languages.
 
 ```bash
-ast-index outline "PaymentFragment.kt"    # Show fragment structure
+ast-index outline "PaymentFragment.kt"    # Show Kotlin fragment structure
+ast-index outline "UserController.java"   # Show Java controller methods
+ast-index outline "App.tsx"               # Show TypeScript/React components and functions
+ast-index outline "handler.rs"            # Show Rust structs, impls, functions
 ```
 
 ### Code Quality
@@ -333,10 +337,11 @@ This works with all search commands: `search`, `symbol`, `class`, `implementatio
 
 ## Multi-Root Projects
 
-Add additional source roots for monorepos or multi-project setups:
+Add additional source roots for monorepos or multi-project setups. Extra roots are indexed alongside the primary project and their module dependencies are included.
 
 ```bash
-ast-index add-root /path/to/other/source    # Add source root
+ast-index add-root /path/to/other/source    # Add source root (warns on overlap)
+ast-index add-root ./subdir --force         # Force add even if inside project root
 ast-index remove-root /path/to/other/source # Remove source root
 ast-index list-roots                        # List configured roots
 ```
@@ -373,7 +378,7 @@ Java parser indexes: classes, interfaces, enums, methods, constructors, fields, 
 
 Maven modules (pom.xml) are fully supported alongside Gradle modules.
 
-- **DI Commands**: `provides`, `inject`, `annotations`
+- **DI Commands**: `provides`, `inject` (@Inject + @Autowired), `annotations`
 - **Compose Commands**: `composables`, `previews`
 - **Coroutines Commands**: `suspend`, `flows`
 - **XML Commands**: `xml-usages`, `resource-usages`

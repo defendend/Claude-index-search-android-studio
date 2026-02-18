@@ -70,12 +70,13 @@ impl ProjectType {
     }
 }
 
-/// Check if project has Android markers (Gradle build files)
+/// Check if project has build system markers (Gradle/Maven build files)
 pub fn has_android_markers(root: &Path) -> bool {
     root.join("settings.gradle.kts").exists()
         || root.join("settings.gradle").exists()
         || root.join("build.gradle.kts").exists()
         || root.join("build.gradle").exists()
+        || root.join("pom.xml").exists()
 }
 
 /// Check if project has iOS markers (Xcode/SPM)

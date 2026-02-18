@@ -1,11 +1,8 @@
-mod db;
-mod indexer;
-mod parsers;
-mod commands;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+
+use ast_index::{db, commands};
 
 #[derive(Parser)]
 #[command(name = "ast-index")]
@@ -571,6 +568,9 @@ enum Commands {
     AddRoot {
         /// Path to add as source root
         path: String,
+        /// Force add even if path overlaps with project root
+        #[arg(long)]
+        force: bool,
     },
     /// Remove source root from project
     RemoveRoot {
@@ -710,7 +710,7 @@ fn main() -> Result<()> {
         Commands::UnusedSymbols { module, export_only, limit } => {
             commands::analysis::cmd_unused_symbols(&root, module.as_deref(), export_only, limit, format)
         }
-        Commands::AddRoot { path } => commands::management::cmd_add_root(&root, &path),
+        Commands::AddRoot { path, force } => commands::management::cmd_add_root(&root, &path, force),
         Commands::RemoveRoot { path } => commands::management::cmd_remove_root(&root, &path),
         Commands::ListRoots => commands::management::cmd_list_roots(&root),
         Commands::Watch => commands::watch::cmd_watch(&root),

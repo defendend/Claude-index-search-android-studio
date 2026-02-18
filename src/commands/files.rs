@@ -19,6 +19,21 @@ use crate::db::SymbolKind;
 use crate::db;
 use super::{search_files, relative_path};
 
+/// Outline helper: parse file with tree-sitter and print symbols, skipping specified kinds.
+/// Returns true if any symbols were printed.
+fn outline_via_treesitter(content: &str, file_type: crate::parsers::FileType, skip_kinds: &[SymbolKind]) -> Result<bool> {
+    let (symbols, _refs) = crate::parsers::parse_file_symbols(content, file_type)?;
+    let mut found = false;
+    for sym in &symbols {
+        if skip_kinds.contains(&sym.kind) {
+            continue;
+        }
+        println!("  {} {} [{}]", format!(":{}", sym.line).dimmed(), sym.name.cyan(), sym.kind.as_str());
+        found = true;
+    }
+    Ok(found)
+}
+
 /// Find files by pattern
 pub fn cmd_file(root: &Path, pattern: &str, exact: bool, limit: usize) -> Result<()> {
     let start = Instant::now();
@@ -203,20 +218,29 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
         }
     } else if ext == "dart" {
         // Dart — delegate to tree-sitter parser for correct results
-        let (symbols, _refs) = crate::parsers::parse_file_symbols(&content, crate::parsers::FileType::Dart)?;
-        for sym in &symbols {
-            // Skip imports/properties for outline (too noisy)
-            match sym.kind {
-                SymbolKind::Import => continue,
-                SymbolKind::Property => continue,
-                _ => {}
-            }
-            let kind_str = sym.kind.as_str();
-            println!("  {} {} [{}]", format!(":{}", sym.line).dimmed(), sym.name.cyan(), kind_str);
-            found = true;
-        }
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Dart, &[SymbolKind::Import, SymbolKind::Property])?;
+    } else if ext == "java" {
+        // Java — delegate to tree-sitter
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Java, &[SymbolKind::Import, SymbolKind::Annotation])?;
+    } else if ext == "ts" || ext == "tsx" || ext == "js" || ext == "jsx" {
+        // TypeScript/JavaScript — delegate to tree-sitter
+        found = outline_via_treesitter(&content, crate::parsers::FileType::TypeScript, &[SymbolKind::Import])?;
+    } else if ext == "swift" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Swift, &[SymbolKind::Import])?;
+    } else if ext == "rb" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Ruby, &[SymbolKind::Import])?;
+    } else if ext == "rs" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Rust, &[SymbolKind::Import])?;
+    } else if ext == "scala" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Scala, &[SymbolKind::Import])?;
+    } else if ext == "cs" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::CSharp, &[SymbolKind::Import])?;
+    } else if ext == "proto" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Proto, &[])?;
+    } else if ext == "m" || ext == "mm" {
+        found = outline_via_treesitter(&content, crate::parsers::FileType::ObjC, &[SymbolKind::Import])?;
     } else {
-        // Kotlin/Java patterns
+        // Kotlin (default fallback — existing regex logic)
         let class_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|abstract|open|final|sealed|data)?\s*)(class|interface|object|enum\s+class)\s+(\w+)")?;
         let fun_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|override|suspend)?\s*)fun\s+(?:<[^>]*>\s*)?(\w+)")?;
         let prop_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|override|const|lateinit)?\s*)(val|var)\s+(\w+)")?;
