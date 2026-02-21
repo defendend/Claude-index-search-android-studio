@@ -1,4 +1,4 @@
-# ast-index v3.18.2
+# ast-index v3.19.0
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,12 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.19.0
+- **`query` command** — execute raw SQL against the index DB with JSON output; enables complex joins, aggregation, and negative queries in a single call (`SELECT`, `WITH`, `EXPLAIN` only — mutations blocked)
+- **`db-path` command** — print SQLite database path for direct access from Python, JS, or any language with SQLite support
+- **`schema` command** — show all tables with columns and row counts in JSON
+- **`agrep` command** — structural code search via ast-grep (`sg`); AST pattern matching with `$NAME`/`$$$` metavariables and `--lang` filter
 
 ### 3.18.2
 - **Fix `composables` returning 0 results** — `@Composable` and `fun` are typically on separate lines in Kotlin; rewritten to two-phase approach (find files, then multi-line scan) instead of single-line grep callback

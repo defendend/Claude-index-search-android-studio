@@ -729,3 +729,50 @@ pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()
     eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
+
+/// Structural code search via ast-grep (requires `sg` or `ast-grep` installed)
+pub fn cmd_ast_grep(root: &Path, pattern: &str, lang: Option<&str>, json: bool) -> Result<()> {
+    // Find ast-grep binary
+    let binary = find_ast_grep_binary()
+        .ok_or_else(|| anyhow::anyhow!(
+            "ast-grep not found. Install it:\n  brew install ast-grep    # macOS\n  npm i -g @ast-grep/cli   # npm\n  cargo install ast-grep    # cargo"
+        ))?;
+
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.arg("run")
+        .arg("--pattern")
+        .arg(pattern)
+        .current_dir(root);
+
+    if let Some(lang) = lang {
+        cmd.arg("--lang").arg(lang);
+    }
+
+    if json {
+        cmd.arg("--json=compact");
+    }
+
+    let status = cmd.status()?;
+
+    if !status.success() && status.code() != Some(1) {
+        // Exit code 1 = no matches (normal for grep), anything else is an error
+        anyhow::bail!("ast-grep exited with code {:?}", status.code());
+    }
+
+    Ok(())
+}
+
+fn find_ast_grep_binary() -> Option<String> {
+    for name in &["sg", "ast-grep"] {
+        if std::process::Command::new(name)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok()
+        {
+            return Some(name.to_string());
+        }
+    }
+    None
+}

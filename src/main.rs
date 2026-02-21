@@ -88,6 +88,12 @@ Project Configuration:
   list-roots             List configured source roots
   install-claude-plugin  Install Claude Code plugin
 
+Programmatic Access:
+  agrep                  Structural code search via ast-grep
+  query                  Execute raw SQL against the index DB
+  db-path                Print path to the SQLite index database
+  schema                 Show database schema (tables and columns)
+
 Options:
 {options}{after-help}\
 ")]
@@ -587,6 +593,30 @@ enum Commands {
     Version,
     /// Install Claude Code plugin to ~/.claude/plugins/
     InstallClaudePlugin,
+    // === Programmatic Access ===
+    /// Structural code search via ast-grep (requires `sg` installed)
+    Agrep {
+        /// AST pattern to match (e.g., "router.launch($$$)")
+        pattern: String,
+        /// Language filter (kotlin, java, typescript, swift, python, rust, go, etc.)
+        #[arg(short, long)]
+        lang: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute raw SQL query against the index database (SELECT only)
+    Query {
+        /// SQL query (SELECT statements only)
+        sql: String,
+        /// Max rows to return
+        #[arg(short, long, default_value = "100")]
+        limit: usize,
+    },
+    /// Print path to the SQLite index database
+    DbPath,
+    /// Show database schema (tables and columns)
+    Schema,
 }
 
 fn main() -> Result<()> {
@@ -720,6 +750,11 @@ fn main() -> Result<()> {
             Ok(())
         }
         Commands::InstallClaudePlugin => cmd_install_claude_plugin(),
+        // Programmatic access
+        Commands::Agrep { pattern, lang, json } => commands::grep::cmd_ast_grep(&root, &pattern, lang.as_deref(), json),
+        Commands::Query { sql, limit } => commands::management::cmd_query(&root, &sql, limit),
+        Commands::DbPath => commands::management::cmd_db_path(&root),
+        Commands::Schema => commands::management::cmd_schema(&root),
     }
 }
 

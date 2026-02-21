@@ -634,3 +634,119 @@ pub fn cmd_list_roots(root: &Path) -> Result<()> {
 
     Ok(())
 }
+
+/// Execute raw SQL query against the index database (SELECT only)
+pub fn cmd_query(root: &Path, sql: &str, limit: usize) -> Result<()> {
+    // Security: only allow SELECT statements
+    let trimmed = sql.trim();
+    let upper = trimmed.to_uppercase();
+    if !upper.starts_with("SELECT") && !upper.starts_with("WITH") && !upper.starts_with("EXPLAIN") {
+        anyhow::bail!("Only SELECT, WITH, and EXPLAIN queries are allowed");
+    }
+    // Block dangerous patterns
+    for keyword in &["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "ATTACH", "DETACH", "PRAGMA"] {
+        // Check that these keywords appear as statements, not inside strings
+        if upper.contains(&format!(" {} ", keyword)) || upper.starts_with(&format!("{} ", keyword)) {
+            anyhow::bail!("Mutation queries are not allowed (found {})", keyword);
+        }
+    }
+
+    let conn = db::open_db(root)?;
+
+    // Apply LIMIT if not already in query
+    let query = if !upper.contains("LIMIT") {
+        format!("{} LIMIT {}", trimmed.trim_end_matches(';'), limit)
+    } else {
+        trimmed.trim_end_matches(';').to_string()
+    };
+
+    let mut stmt = conn.prepare(&query)?;
+    let column_count = stmt.column_count();
+    let column_names: Vec<String> = (0..column_count)
+        .map(|i| stmt.column_name(i).unwrap_or("?").to_string())
+        .collect();
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+
+    let mut result_rows = stmt.query([])?;
+    while let Some(row) = result_rows.next()? {
+        let mut obj = serde_json::Map::new();
+        for (i, col_name) in column_names.iter().enumerate() {
+            let val: serde_json::Value = match row.get_ref(i)? {
+                rusqlite::types::ValueRef::Null => serde_json::Value::Null,
+                rusqlite::types::ValueRef::Integer(n) => serde_json::json!(n),
+                rusqlite::types::ValueRef::Real(f) => serde_json::json!(f),
+                rusqlite::types::ValueRef::Text(s) => {
+                    serde_json::Value::String(String::from_utf8_lossy(s).to_string())
+                }
+                rusqlite::types::ValueRef::Blob(b) => {
+                    serde_json::Value::String(format!("<blob {} bytes>", b.len()))
+                }
+            };
+            obj.insert(col_name.clone(), val);
+        }
+        rows.push(serde_json::Value::Object(obj));
+    }
+
+    let output = serde_json::json!({
+        "columns": column_names,
+        "rows": rows,
+        "count": rows.len(),
+    });
+
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
+/// Print path to the SQLite index database
+pub fn cmd_db_path(root: &Path) -> Result<()> {
+    let db_path = db::get_db_path(root)?;
+    println!("{}", db_path.display());
+    Ok(())
+}
+
+/// Show database schema (tables and columns)
+pub fn cmd_schema(root: &Path) -> Result<()> {
+    let conn = db::open_db(root)?;
+
+    let mut stmt = conn.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' ORDER BY name"
+    )?;
+
+    let tables: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut schema = serde_json::Map::new();
+
+    for table in &tables {
+        let mut cols_stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+        let columns: Vec<serde_json::Value> = cols_stmt.query_map([], |row| {
+            let name: String = row.get(1)?;
+            let col_type: String = row.get(2)?;
+            let not_null: bool = row.get(3)?;
+            let pk: bool = row.get(5)?;
+            Ok(serde_json::json!({
+                "name": name,
+                "type": col_type,
+                "not_null": not_null,
+                "primary_key": pk,
+            }))
+        })?.filter_map(|r| r.ok()).collect();
+
+        // Get row count
+        let count: i64 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM {}", table),
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        schema.insert(table.clone(), serde_json::json!({
+            "columns": columns,
+            "row_count": count,
+        }));
+    }
+
+    println!("{}", serde_json::to_string_pretty(&serde_json::Value::Object(schema))?);
+    Ok(())
+}

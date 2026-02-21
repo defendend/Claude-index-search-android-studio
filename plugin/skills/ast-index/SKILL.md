@@ -355,6 +355,123 @@ ast-index help <command>             # Show help for specific command
 ast-index install-claude-plugin      # Install Claude Code plugin to ~/.claude/plugins/
 ```
 
+## Programmatic Access (SQL & SDK)
+
+For complex analysis that requires combining multiple queries, filtering, or aggregation — use direct SQL access instead of chaining multiple commands.
+
+### Structural Search (ast-grep)
+
+Structural code search using AST patterns. Requires `sg` (ast-grep) installed.
+
+```bash
+# Simple pattern matching
+ast-index agrep "router.launch($$$)" --lang kotlin
+ast-index agrep "@Inject constructor($$$)" --lang kotlin
+ast-index agrep "suspend fun $NAME($$$)" --lang kotlin
+
+# Find classes extending a specific base
+ast-index agrep "class $NAME : BasePresenter($$$)" --lang kotlin
+
+# Find async functions (Swift)
+ast-index agrep "func $NAME($$$) async" --lang swift
+
+# Find React components
+ast-index agrep "export default function $NAME($$$)" --lang typescript
+
+# JSON output for programmatic use
+ast-index agrep "@Composable fun $NAME($$$)" --lang kotlin --json
+```
+
+**Pattern syntax** (ast-grep):
+- `$NAME` — matches a single AST node (captures as metavariable)
+- `$$$` — matches zero or more AST nodes (variadic)
+- Everything else is literal pattern matching against the AST
+
+**When to use `agrep` vs built-in commands:**
+- `composables`, `inject`, `suspend` → use built-in (faster, pre-configured)
+- Custom structural patterns, negative matching, context queries → use `agrep`
+
+### Raw SQL Query
+
+```bash
+# Execute any SELECT query against the index database (JSON output)
+ast-index query "SELECT s.name, s.kind, f.path FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.kind = 'class'"
+
+# With limit
+ast-index query "SELECT * FROM symbols WHERE name LIKE '%Service%'" --limit 50
+
+# Complex joins — find classes that implement an interface but have no usages
+ast-index query "SELECT s.name, f.path FROM symbols s JOIN files f ON s.file_id = f.id JOIN inheritance i ON s.id = i.child_id WHERE i.parent_name = 'Repository' AND s.name NOT IN (SELECT name FROM refs)"
+
+# Find files with most symbols (complexity hotspots)
+ast-index query "SELECT f.path, COUNT(*) as sym_count FROM symbols s JOIN files f ON s.file_id = f.id GROUP BY f.id ORDER BY sym_count DESC LIMIT 20"
+
+# Find unused classes (defined but never referenced)
+ast-index query "SELECT s.name, s.kind, f.path FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.kind IN ('class', 'interface') AND s.name NOT IN (SELECT name FROM refs) AND s.name NOT IN (SELECT parent_name FROM inheritance)"
+
+# Module dependency analysis — find modules with most dependencies
+ast-index query "SELECT m.name, COUNT(*) as dep_count FROM module_deps md JOIN modules m ON md.module_id = m.id GROUP BY m.id ORDER BY dep_count DESC"
+
+# CTE — transitive dependency chain
+ast-index query "WITH RECURSIVE chain AS (SELECT md.dep_module_id, m.name, 1 as depth FROM module_deps md JOIN modules m ON md.dep_module_id = m.id WHERE md.module_id = (SELECT id FROM modules WHERE name LIKE '%payments%') UNION ALL SELECT md.dep_module_id, m.name, c.depth + 1 FROM chain c JOIN module_deps md ON md.module_id = c.dep_module_id JOIN modules m ON md.dep_module_id = m.id WHERE c.depth < 5) SELECT DISTINCT name, depth FROM chain ORDER BY depth, name"
+```
+
+**Security**: Only `SELECT`, `WITH`, and `EXPLAIN` queries allowed. Mutations (`INSERT`, `UPDATE`, `DELETE`, `DROP`) are blocked.
+
+### Database Schema
+
+```bash
+# Show all tables with columns and row counts (JSON)
+ast-index schema
+```
+
+Key tables:
+| Table | Description | Key columns |
+|-------|-------------|-------------|
+| `files` | Indexed source files | `path`, `mtime`, `size` |
+| `symbols` | Classes, functions, properties, etc. | `name`, `kind`, `line`, `file_id`, `signature` |
+| `symbols_fts` | FTS5 full-text search on symbols | `name`, `signature` |
+| `inheritance` | Parent-child type relationships | `child_id`, `parent_name`, `kind` |
+| `refs` | Symbol references/usages | `name`, `line`, `file_id`, `context` |
+| `modules` | Build modules (Gradle, Maven, etc.) | `name`, `path`, `kind` |
+| `module_deps` | Module → module dependencies | `module_id`, `dep_module_id` |
+| `transitive_deps` | Pre-computed transitive deps | `module_id`, `dependency_id`, `depth` |
+| `xml_usages` | Android XML layout class usages | `class_name`, `file_path` |
+| `resources` | Android resource definitions | `type`, `name`, `file_path` |
+
+### Direct Database Access (SDK / Scripting)
+
+```bash
+# Get the SQLite database path for external tools
+ast-index db-path
+# Output: /Users/me/.cache/ast-index/abc123/index.db
+```
+
+Use this path with any language that supports SQLite:
+
+```python
+import sqlite3, json
+db_path = subprocess.check_output(["ast-index", "db-path"]).decode().strip()
+conn = sqlite3.connect(db_path)
+
+# Example: find all classes implementing an interface with no references
+unused_impls = conn.execute("""
+    SELECT s.name, f.path, i.parent_name
+    FROM symbols s
+    JOIN files f ON s.file_id = f.id
+    JOIN inheritance i ON s.id = i.child_id
+    WHERE s.name NOT IN (SELECT name FROM refs)
+    ORDER BY i.parent_name, s.name
+""").fetchall()
+for name, path, parent in unused_impls:
+    print(f"  {name} implements {parent} — {path}")
+```
+
+**When to use `query` vs predefined commands:**
+- Simple lookups → use `search`, `class`, `usages` (faster, formatted output)
+- Complex joins, aggregation, negative conditions → use `query` (one call instead of N)
+- Batch analysis, scripting, CI pipelines → use `db-path` + direct SQLite access
+
 ## Performance Reference
 
 | Command | Time | Notes |
