@@ -139,3 +139,59 @@
 ; abstract method(): void
 (abstract_method_signature
   name: (property_identifier) @abstract_method_name) @abstract_method_node
+
+; === Ambient declarations (declare keyword, .d.ts files) ===
+
+; declare function name(...)
+(ambient_declaration
+  (function_signature
+    name: (identifier) @func_name))
+
+; export declare function name(...)
+(export_statement
+  (ambient_declaration
+    (function_signature
+      name: (identifier) @export_func_name)))
+
+; export declare class Name {}
+(export_statement
+  (ambient_declaration
+    (class_declaration
+      name: (type_identifier) @export_class_name) @export_class_node))
+
+; export declare abstract class Name {}
+(export_statement
+  (ambient_declaration
+    (abstract_class_declaration
+      name: (type_identifier) @export_abstract_class_name) @export_abstract_class_node))
+
+; export declare interface Name {}
+(export_statement
+  (ambient_declaration
+    (interface_declaration
+      name: (type_identifier) @export_interface_name) @export_interface_node))
+
+; export declare type Name = ...
+(export_statement
+  (ambient_declaration
+    (type_alias_declaration
+      name: (type_identifier) @export_type_alias_name)))
+
+; export declare enum Name {}
+(export_statement
+  (ambient_declaration
+    (enum_declaration
+      name: (identifier) @export_enum_name)))
+
+; export declare namespace Name {}
+(export_statement
+  (ambient_declaration
+    (internal_module
+      name: (identifier) @export_namespace_name)))
+
+; export declare const NAME: Type (ambient, may have no value)
+(export_statement
+  (ambient_declaration
+    (lexical_declaration
+      (variable_declarator
+        name: (identifier) @export_ambient_const_name))))

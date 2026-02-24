@@ -28,31 +28,31 @@ pub fn parse_typescript_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
 
     // Class definition: class ClassName extends/implements ...
     static CLASS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?(?:abstract\s+)?class\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*(?:extends\s+([A-Z][A-Za-z0-9_.<>,\s]*))?(?:\s+implements\s+([A-Z][A-Za-z0-9_.<>,\s]*))?"
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?(?:abstract\s+)?class\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*(?:extends\s+([A-Z][A-Za-z0-9_.<>,\s]*))?(?:\s+implements\s+([A-Z][A-Za-z0-9_.<>,\s]*))?"
     ).unwrap());
     let class_re = &*CLASS_RE;
 
-    // Interface definition: interface InterfaceName extends ...
+    // Interface definition: interface InterfaceName extends ... or declare interface
     static INTERFACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?interface\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*(?:extends\s+([A-Z][A-Za-z0-9_.<>,\s]*))?"
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?interface\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*(?:extends\s+([A-Z][A-Za-z0-9_.<>,\s]*))?"
     ).unwrap());
     let interface_re = &*INTERFACE_RE;
 
-    // Type alias: type TypeName = ...
+    // Type alias: type TypeName = ... or declare type TypeName = ...
     static TYPE_ALIAS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?type\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*="
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?type\s+([A-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*="
     ).unwrap());
     let type_alias_re = &*TYPE_ALIAS_RE;
 
     // Enum: enum EnumName { ... }
     static ENUM_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?(?:const\s+)?enum\s+([A-Z][A-Za-z0-9_]*)"
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?(?:const\s+)?enum\s+([A-Z][A-Za-z0-9_]*)"
     ).unwrap());
     let enum_re = &*ENUM_RE;
 
-    // Regular function: function functionName(...) or export function
+    // Regular function: function functionName(...) or export function or export declare function
     static FUNC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]*>)?\s*\("
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]*>)?\s*\("
     ).unwrap());
     let func_re = &*FUNC_RE;
 
@@ -81,8 +81,9 @@ pub fn parse_typescript_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
     let react_func_component_re = &*REACT_FUNC_COMPONENT_RE;
 
     // React hooks: const [state, setState] = useState(...) or custom hooks: function useXxx()
+    // Also matches: export declare function useXxx()
     static HOOK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^[ \t]*(?:export\s+)?(?:const|function)\s+(use[A-Z][a-zA-Z0-9_]*)"
+        r"(?m)^[ \t]*(?:export\s+)?(?:declare\s+)?(?:const|function)\s+(use[A-Z][a-zA-Z0-9_]*)"
     ).unwrap());
     let hook_re = &*HOOK_RE;
 
@@ -98,9 +99,9 @@ pub fn parse_typescript_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
     ).unwrap());
     let import_re = &*IMPORT_RE;
 
-    // Module-level const (UPPER_CASE): const API_URL = ...
+    // Module-level const (UPPER_CASE): const API_URL = ... or declare const
     static CONST_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r"(?m)^(?:export\s+)?const\s+([A-Z][A-Z0-9_]+)\s*(?::\s*[^=]+)?\s*="
+        r"(?m)^(?:export\s+)?(?:declare\s+)?const\s+([A-Z][A-Z0-9_]+)\s*(?::\s*[^=]+)?\s*="
     ).unwrap());
     let const_re = &*CONST_RE;
 

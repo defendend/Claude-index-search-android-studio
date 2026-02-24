@@ -204,6 +204,9 @@ impl LanguageParser for TypeScriptParser {
         let idx_namespace_name = idx("namespace_name");
         let idx_export_namespace_name = idx("export_namespace_name");
 
+        // Ambient const captures (declare const without value)
+        let idx_export_ambient_const_name = idx("export_ambient_const_name");
+
         // Import captures
         let idx_import_source = idx("import_source");
 
@@ -517,6 +520,23 @@ impl LanguageParser for TypeScriptParser {
                 let line = node_line(&name_cap.node);
                 if is_all_caps(name) && emitted_lines.insert((name.to_string(), line)) {
                     // Export statement is always module-level
+                    symbols.push(ParsedSymbol {
+                        name: name.to_string(),
+                        kind: SymbolKind::Constant,
+                        line,
+                        signature: line_text(content, line).trim().to_string(),
+                        parents: vec![],
+                    });
+                }
+                continue;
+            }
+
+            // === Ambient constants (export declare const) ===
+
+            if let Some(name_cap) = find_capture(m, idx_export_ambient_const_name) {
+                let name = node_text(content, &name_cap.node);
+                let line = node_line(&name_cap.node);
+                if is_all_caps(name) && emitted_lines.insert((name.to_string(), line)) {
                     symbols.push(ParsedSymbol {
                         name: name.to_string(),
                         kind: SymbolKind::Constant,
@@ -867,6 +887,46 @@ const obj = {
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
         assert!(!symbols.iter().any(|s| s.name == "method" && s.kind == SymbolKind::Function));
         assert!(!symbols.iter().any(|s| s.name == "prop" && s.kind == SymbolKind::Function));
+    }
+
+    #[test]
+    fn test_parse_dts_ambient_declarations() {
+        // .d.ts files use "declare" keyword (ambient declarations)
+        let content = r#"
+import type { ToasterPublicMethods } from "../types.js";
+export declare function useToaster(): ToasterPublicMethods;
+export declare class Theme {}
+export declare interface ThemeProps {
+    color: string;
+}
+export declare type ThemeColor = "light" | "dark";
+export declare enum Direction {
+    Up = "up",
+    Down = "down",
+}
+export declare const MAX_RETRIES: number;
+export declare namespace Utils {
+    function helper(): void;
+}
+declare function internalHelper(): void;
+"#;
+        let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
+        // declare function
+        assert!(symbols.iter().any(|s| s.name == "useToaster" && s.kind == SymbolKind::Function),
+            "useToaster not found; symbols: {:?}", symbols.iter().map(|s| (&s.name, &s.kind)).collect::<Vec<_>>());
+        assert!(symbols.iter().any(|s| s.name == "internalHelper" && s.kind == SymbolKind::Function));
+        // declare class
+        assert!(symbols.iter().any(|s| s.name == "Theme" && s.kind == SymbolKind::Class));
+        // declare interface
+        assert!(symbols.iter().any(|s| s.name == "ThemeProps" && s.kind == SymbolKind::Interface));
+        // declare type
+        assert!(symbols.iter().any(|s| s.name == "ThemeColor" && s.kind == SymbolKind::TypeAlias));
+        // declare enum
+        assert!(symbols.iter().any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum));
+        // declare const (ALL_CAPS)
+        assert!(symbols.iter().any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant));
+        // declare namespace
+        assert!(symbols.iter().any(|s| s.name == "Utils" && s.kind == SymbolKind::Package));
     }
 
     #[test]

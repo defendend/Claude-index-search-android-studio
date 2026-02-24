@@ -1,4 +1,4 @@
-# ast-index v3.19.0
+# ast-index v3.20.0
 
 Fast code search CLI for 15 programming languages. Native Rust implementation.
 
@@ -322,6 +322,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.20.0
+- **`.d.ts` indexing from `node_modules`** — Frontend projects automatically index TypeScript type declarations from dependencies; resolves pnpm symlinks safely (no `follow_links` on FUSE mounts)
+- **Tree-sitter ambient declarations** — `declare function/class/interface/type/enum/const/namespace` in `.d.ts` files now parsed correctly via tree-sitter queries
+- **`search` includes refs** — `search` command now searches the `refs` table, finding library-only symbols (e.g. `useToaster` from `@gravity-ui/uikit`) even when they have no local definition
 
 ### 3.19.0
 - **`query` command** — execute raw SQL against the index DB with JSON output; enables complex joins, aggregation, and negative queries in a single call (`SELECT`, `WITH`, `EXPLAIN` only — mutations blocked)

@@ -51,12 +51,17 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
     };
     let symbols_time = symbols_start.elapsed();
 
-    // 3. Search in file contents (grep)
+    // 3. Search in references (imports and usages from index)
+    let refs_start = Instant::now();
+    let ref_matches = db::search_refs(&conn, query, limit)?;
+    let refs_time = refs_start.elapsed();
+
+    // 4. Search in file contents (grep)
     let content_start = Instant::now();
     let pattern = regex::escape(query);
     let mut content_matches: Vec<(String, usize, String)> = vec![];
 
-    super::search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "py", "go", "rs", "cpp", "c", "proto"], limit, |path, line_num, line| {
+    super::search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "py", "go", "rs", "cpp", "c", "proto", "ts", "tsx", "js", "jsx"], limit, |path, line_num, line| {
         let rel_path = super::relative_path(root, path);
         // Apply scope filter for grep results
         if let Some(prefix) = scope.dir_prefix {
@@ -77,6 +82,9 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
         let result = serde_json::json!({
             "files": files,
             "symbols": symbols,
+            "references": ref_matches.iter().map(|(name, count)| {
+                serde_json::json!({"name": name, "usage_count": count})
+            }).collect::<Vec<_>>(),
             "content_matches": content_matches.iter().map(|(p, l, c)| {
                 serde_json::json!({"path": p, "line": l, "content": c})
             }).collect::<Vec<_>>()
@@ -99,9 +107,16 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
     }
 
     if !symbols.is_empty() {
-        println!("\n{}", "Symbols:".cyan());
+        println!("\n{}", "Symbols (definitions):".cyan());
         for s in symbols.iter().take(limit) {
             println!("  {} [{}]: {}:{}", s.name.cyan(), s.kind, s.path, s.line);
+        }
+    }
+
+    if !ref_matches.is_empty() {
+        println!("\n{}", "References (imports & usages):".cyan());
+        for (name, count) in ref_matches.iter().take(limit) {
+            println!("  {} — used in {} places", name.cyan(), count);
         }
     }
 
@@ -116,14 +131,14 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
         }
     }
 
-    if files.is_empty() && symbols.is_empty() && content_matches.is_empty() {
+    if files.is_empty() && symbols.is_empty() && ref_matches.is_empty() && content_matches.is_empty() {
         println!("  No results found.");
     }
 
     // Timing breakdown
     eprintln!("\n{}", format!(
-        "Time: {:?} (files: {:?}, symbols: {:?}, content: {:?})",
-        total_start.elapsed(), files_time, symbols_time, content_time
+        "Time: {:?} (files: {:?}, symbols: {:?}, refs: {:?}, content: {:?})",
+        total_start.elapsed(), files_time, symbols_time, refs_time, content_time
     ).dimmed());
     Ok(())
 }

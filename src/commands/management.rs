@@ -183,6 +183,18 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
                 if verbose { eprintln!("[verbose] transitive_deps: {} in {:?}", trans_count, t.elapsed()); }
             }
 
+            // Frontend-specific: .d.ts from node_modules
+            let mut dts_count = 0;
+            if root.join("node_modules").exists() {
+                if verbose { eprintln!("[verbose] indexing .d.ts from node_modules..."); }
+                let t = Instant::now();
+                dts_count = indexer::index_node_modules_dts(&mut conn, root, true)?;
+                if verbose { eprintln!("[verbose] node_modules .d.ts: {} files in {:?}", dts_count, t.elapsed()); }
+                if dts_count > 0 {
+                    println!("{}", format!("Indexed {} .d.ts type declarations from node_modules", dts_count).dimmed());
+                }
+            }
+
             // Android-specific: XML layouts and resources
             let mut xml_count = 0;
             let mut res_count = 0;
@@ -234,6 +246,14 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
                     format!(
                         "Indexed {} files, {} modules, {} storyboard usages, {} assets ({} usages)",
                         file_count, module_count, sb_count, asset_count, asset_usage_count
+                    ).green()
+                );
+            } else if dts_count > 0 {
+                println!(
+                    "{}",
+                    format!(
+                        "Indexed {} files (+{} .d.ts), {} modules, {} deps",
+                        file_count, dts_count, module_count, dep_count
                     ).green()
                 );
             } else {

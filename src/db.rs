@@ -805,6 +805,32 @@ pub fn find_references(
     Ok(results)
 }
 
+/// Search references by name (prefix match, grouped by unique name)
+pub fn search_refs(conn: &Connection, query: &str, limit: usize) -> Result<Vec<(String, i64)>> {
+    let pattern = format!("{}%", query);
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT r.name, COUNT(*) as usage_count
+        FROM refs r
+        WHERE r.name LIKE ?1
+        GROUP BY r.name
+        ORDER BY
+            CASE WHEN r.name = ?2 THEN 0
+                 WHEN r.name LIKE ?1 THEN 1
+                 ELSE 2
+            END,
+            usage_count DESC
+        LIMIT ?3
+        "#,
+    )?;
+    let results = stmt
+        .query_map(params![pattern, query, limit as i64], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(results)
+}
+
 /// Count references in the database
 pub fn count_refs(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("SELECT COUNT(*) FROM refs", [], |row| row.get(0))?)

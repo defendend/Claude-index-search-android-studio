@@ -1945,6 +1945,214 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
     Ok(count)
 }
 
+/// Index .d.ts files from node_modules (type declarations for external libraries).
+/// These provide symbol definitions for imported libraries (e.g., React, lodash).
+/// Only .d.ts files are indexed — not full JS/TS source from node_modules.
+///
+/// Handles pnpm (symlinks to store) by resolving top-level package symlinks
+/// and mapping paths back to node_modules/... for storage.
+/// Does NOT use follow_links to avoid loops on FUSE mounts (Arcadia).
+pub fn index_node_modules_dts(conn: &mut Connection, root: &Path, progress: bool) -> Result<usize> {
+    use ignore::WalkBuilder;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Instant;
+
+    let node_modules = root.join("node_modules");
+    if !node_modules.exists() || !node_modules.is_dir() {
+        return Ok(0);
+    }
+
+    let verbose = std::env::var("AST_INDEX_VERBOSE").is_ok();
+
+    if progress {
+        eprintln!("Scanning node_modules for .d.ts type declarations...");
+    }
+
+    let walk_start = Instant::now();
+
+    // Collect (resolved_dir, node_modules_prefix) pairs.
+    // Resolves symlinks only at the package level (safe for pnpm).
+    // E.g.: (resolved_path, "node_modules/@types/react")
+    let mut pkg_map: Vec<(PathBuf, String)> = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(&node_modules) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            let name_str = entry.file_name().to_string_lossy().to_string();
+
+            if name_str.starts_with('.') {
+                continue;
+            }
+
+            if name_str.starts_with('@') {
+                // Scoped packages: enumerate @scope/pkg
+                let scope_dir = fs::canonicalize(&path).unwrap_or(path);
+                if let Ok(scoped) = fs::read_dir(&scope_dir) {
+                    for sub in scoped.filter_map(|e| e.ok()) {
+                        let sub_name = sub.file_name().to_string_lossy().to_string();
+                        let sub_resolved = fs::canonicalize(sub.path())
+                            .unwrap_or_else(|_| sub.path());
+                        if sub_resolved.is_dir() {
+                            let prefix = format!("node_modules/{}/{}", name_str, sub_name);
+                            pkg_map.push((sub_resolved, prefix));
+                        }
+                    }
+                }
+            } else {
+                let resolved = fs::canonicalize(&path).unwrap_or(path);
+                if resolved.is_dir() {
+                    let prefix = format!("node_modules/{}", name_str);
+                    pkg_map.push((resolved, prefix));
+                }
+            }
+        }
+    }
+
+    if verbose {
+        eprintln!("[verbose] found {} package dirs in node_modules", pkg_map.len());
+    }
+
+    // Walk each resolved package dir for .d.ts files.
+    // follow_links=false — already resolved top-level symlinks.
+    // Store (abs_path, rel_path) pairs for correct DB storage.
+    let mut dts_files: Vec<(PathBuf, String)> = Vec::new();
+
+    for (pkg_dir, nm_prefix) in &pkg_map {
+        let mut builder = WalkBuilder::new(pkg_dir);
+        builder
+            .hidden(false)
+            .git_ignore(false)
+            .git_exclude(false)
+            .follow_links(false)
+            .max_depth(Some(8))
+            .filter_entry(|entry| {
+                if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if name == "node_modules" || name.starts_with('.') {
+                            return false;
+                        }
+                    }
+                }
+                true
+            });
+
+        for entry in builder.build().filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.ends_with(".d.ts") {
+                    // Map resolved path back to node_modules/... relative path
+                    let sub_path = path.strip_prefix(pkg_dir)
+                        .unwrap_or(path)
+                        .to_string_lossy();
+                    let rel_path = if sub_path.is_empty() || sub_path == "." {
+                        nm_prefix.clone()
+                    } else {
+                        format!("{}/{}", nm_prefix, sub_path)
+                    };
+                    dts_files.push((path.to_path_buf(), rel_path));
+                }
+            }
+        }
+    }
+
+    if dts_files.is_empty() {
+        if verbose {
+            eprintln!("[verbose] no .d.ts files found in node_modules");
+        }
+        return Ok(0);
+    }
+
+    if progress {
+        eprintln!("Found {} .d.ts files in node_modules", dts_files.len());
+    }
+    if verbose {
+        eprintln!("[verbose] .d.ts walk completed in {:?}", walk_start.elapsed());
+    }
+
+    // Parse in parallel and write to DB in chunks.
+    // Uses parse_dts_file which takes an explicit rel_path (since real paths
+    // may be in pnpm store, outside project root).
+    const CHUNK_SIZE: usize = 500;
+    let parsed_global = Arc::new(AtomicUsize::new(0));
+    let total_files = dts_files.len();
+
+    let num_threads = std::env::var("AST_INDEX_THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get().min(8))
+                .unwrap_or(4)
+        });
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build thread pool: {}", e))?;
+
+    let mut total_count = 0;
+
+    for chunk in dts_files.chunks(CHUNK_SIZE) {
+        let counter = parsed_global.clone();
+        let total = total_files;
+
+        let parsed_files: Vec<ParsedFile> = pool.install(|| {
+            chunk
+                .par_iter()
+                .filter_map(|(abs_path, rel_path)| {
+                    let result = parse_dts_file(abs_path, rel_path).ok();
+                    let c = counter.fetch_add(1, Ordering::Relaxed) + 1;
+                    if progress && c % 1000 == 0 {
+                        eprintln!("Parsed {} / {} .d.ts files...", c, total);
+                    }
+                    result
+                })
+                .collect()
+        });
+
+        write_batch_to_db(conn, parsed_files, &mut total_count)?;
+    }
+
+    if progress {
+        eprintln!("Indexed {} .d.ts files from node_modules", total_count);
+    }
+
+    Ok(total_count)
+}
+
+/// Parse a .d.ts file with an explicit relative path (for pnpm store paths)
+fn parse_dts_file(file_path: &Path, rel_path: &str) -> Result<ParsedFile> {
+    let metadata = fs::metadata(file_path)?;
+    let mtime = metadata
+        .modified()?
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs() as i64;
+    let size = metadata.len() as i64;
+
+    // Skip files larger than 1 MB
+    if size > 1_000_000 {
+        return Ok(ParsedFile {
+            rel_path: rel_path.to_string(),
+            mtime,
+            size,
+            symbols: vec![],
+            refs: vec![],
+        });
+    }
+
+    let content = fs::read_to_string(file_path)?;
+    let (symbols, refs) = parsers::parse_file_symbols(&content, parsers::FileType::TypeScript)?;
+
+    Ok(ParsedFile {
+        rel_path: rel_path.to_string(),
+        mtime,
+        size,
+        symbols,
+        refs,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
