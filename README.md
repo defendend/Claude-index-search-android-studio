@@ -72,6 +72,12 @@ ast-index implementations Presenter
 ast-index usages Repository
 ```
 
+## 💝 Support Development
+
+[![Support on Boosty](https://img.shields.io/badge/Support%20on-Boosty-FF5722?style=for-the-badge&logo=star)](https://boosty.to/ast_index/donate)
+
+---
+
 ## Commands (46+)
 
 ### Grep-based (no index required)
