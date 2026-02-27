@@ -14,6 +14,7 @@
 //! - Rust (systems programming)
 //! - Ruby (Rails, RSpec)
 //! - C# (.NET, Unity, ASP.NET)
+//! - PHP (Laravel, Symfony)
 //! - Dart/Flutter
 
 pub mod perl;
@@ -360,6 +361,7 @@ pub enum FileType {
     Vue,
     Svelte,
     Scala,
+    Php,
 }
 
 impl FileType {
@@ -385,6 +387,7 @@ impl FileType {
             "vue" => Some(FileType::Vue),
             "svelte" => Some(FileType::Svelte),
             "scala" | "sc" => Some(FileType::Scala),
+            "php" | "phtml" => Some(FileType::Php),
             _ => None,
         }
     }
@@ -401,7 +404,7 @@ fn strip_comments(content: &str, file_type: FileType) -> String {
         // C-style comments (no nesting)
         FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
         FileType::CSharp | FileType::Proto | FileType::TypeScript |
-        FileType::Dart | FileType::Cpp | FileType::Scala => strip_c_comments(content, false),
+        FileType::Dart | FileType::Cpp | FileType::Scala | FileType::Php => strip_c_comments(content, false),
         // C-style comments with nesting support
         FileType::Swift | FileType::Rust => strip_c_comments(content, true),
         // Hash comments + docstrings
@@ -568,6 +571,8 @@ mod tests {
         assert!(is_supported_extension("proto"));
         assert!(is_supported_extension("cpp"));
         assert!(is_supported_extension("pm"));
+        assert!(is_supported_extension("php"));
+        assert!(is_supported_extension("phtml"));
         assert!(is_supported_extension("vue"));
         assert!(is_supported_extension("svelte"));
     }
@@ -783,6 +788,8 @@ mod tests {
         assert_eq!(FileType::from_extension("tsx"), Some(FileType::TypeScript));
         assert_eq!(FileType::from_extension("vue"), Some(FileType::Vue));
         assert_eq!(FileType::from_extension("svelte"), Some(FileType::Svelte));
+        assert_eq!(FileType::from_extension("php"), Some(FileType::Php));
+        assert_eq!(FileType::from_extension("phtml"), Some(FileType::Php));
         assert_eq!(FileType::from_extension("proto"), Some(FileType::Proto));
         assert_eq!(FileType::from_extension("wsdl"), Some(FileType::Wsdl));
         assert_eq!(FileType::from_extension("cpp"), Some(FileType::Cpp));
