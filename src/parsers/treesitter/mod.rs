@@ -10,6 +10,7 @@ pub mod go;
 pub mod java;
 pub mod kotlin;
 pub mod objc;
+pub mod php;
 pub mod proto;
 pub mod python;
 pub mod ruby;
@@ -45,6 +46,7 @@ pub fn get_treesitter_parser(file_type: FileType) -> Option<&'static dyn Languag
         FileType::Java => Some(&java::JAVA_PARSER),
         FileType::Kotlin => Some(&kotlin::KOTLIN_PARSER),
         FileType::ObjC => Some(&objc::OBJC_PARSER),
+        FileType::Php => Some(&php::PHP_PARSER),
         FileType::Proto => Some(&proto::PROTO_PARSER),
         FileType::Python => Some(&python::PYTHON_PARSER),
         FileType::Ruby => Some(&ruby::RUBY_PARSER),

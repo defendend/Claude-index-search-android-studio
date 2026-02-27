@@ -1,11 +1,11 @@
 ---
 name: ast-index
-description: This skill should be used when the user asks to "find a class", "search for symbol", "find usages", "find implementations", "search codebase", "find file", "class hierarchy", "find callers", "module dependencies", "unused dependencies", "project map", "project conventions", "project structure", "what frameworks", "what architecture", "find Perl subs", "Perl exports", "find Python class", "Go struct", "Go interface", "find React component", "find TypeScript interface", "find Rust struct", "find Ruby class", "find C# controller", "find Dart class", "find Flutter widget", "find mixin", "find Scala trait", "find case class", "find object", or needs fast code search in Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, TypeScript/JavaScript, Rust, Ruby, C#, Scala, Perl, Python, Go, C++, or Protocol Buffers projects. Also triggered by mentions of "ast-index" CLI tool.
+description: This skill should be used when the user asks to "find a class", "search for symbol", "find usages", "find implementations", "search codebase", "find file", "class hierarchy", "find callers", "module dependencies", "unused dependencies", "project map", "project conventions", "project structure", "what frameworks", "what architecture", "find Perl subs", "Perl exports", "find Python class", "Go struct", "Go interface", "find React component", "find TypeScript interface", "find Rust struct", "find Ruby class", "find C# controller", "find Dart class", "find Flutter widget", "find mixin", "find Scala trait", "find case class", "find object", "find PHP class", "find Laravel model", "find PHP trait", or needs fast code search in Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, TypeScript/JavaScript, Rust, Ruby, C#, Scala, PHP, Perl, Python, Go, C++, or Protocol Buffers projects. Also triggered by mentions of "ast-index" CLI tool.
 ---
 
 # ast-index - Code Search for Multi-Platform Projects
 
-Fast native Rust CLI for structural code search in Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, TypeScript/JavaScript, Rust, Ruby, C#, Scala, Perl, Python, Go, C++, and Proto projects using SQLite + FTS5 index.
+Fast native Rust CLI for structural code search in Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, TypeScript/JavaScript, Rust, Ruby, C#, Scala, PHP, Perl, Python, Go, C++, and Proto projects using SQLite + FTS5 index.
 
 ## Critical Rules
 
@@ -52,6 +52,7 @@ The index is stored at `~/Library/Caches/ast-index/<project-hash>/index.db` (mac
 | .NET | C#, ASP.NET, Unity | *.csproj |
 | Dart/Flutter | Dart | pubspec.yaml |
 | Scala | Scala | Bazel (WORKSPACE, BUILD) |
+| PHP | PHP | composer.json |
 | Perl | Perl | Makefile.PL, Build.PL |
 | Python | Python | None (*.py files) |
 | Go | Go | None (*.go files) |
@@ -572,6 +573,12 @@ Consult: `references/go-commands.md`
 - Index: `class`, `case class`, `object`, `trait`, `enum` (Scala 3), `def`, `val`, `var`, `type`, `given`
 - Supports: Inheritance (`extends`/`with`), companion objects
 - `outline` and `imports` work with Scala files
+
+### PHP
+
+- Index: `namespace`, `class`, `interface`, `trait`, `enum`, `function`, `method`, `const`, `property`, `use`
+- Supports: Laravel (models, traits, facades), `extends`/`implements`, namespace imports
+- `outline` and `imports` work with PHP files
 
 ### Perl
 

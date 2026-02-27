@@ -1,6 +1,6 @@
-# ast-index v3.20.0
+# ast-index v3.21.0
 
-Fast code search CLI for 15 programming languages. Native Rust implementation.
+Fast code search CLI for 16 programming languages. Native Rust implementation.
 
 ## Supported Projects
 
@@ -11,6 +11,7 @@ Fast code search CLI for 15 programming languages. Native Rust implementation.
 | Web/Frontend | TypeScript, JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte` |
 | Systems | Rust | `.rs` |
 | Backend | C#, Python, Go, C++, Scala | `.cs`, `.py`, `.go`, `.cpp`, `.cc`, `.c`, `.hpp`, `.scala`, `.sc` |
+| Backend | PHP | `.php`, `.phtml` |
 | Scripting | Ruby, Perl | `.rb`, `.pm`, `.pl`, `.t` |
 | Mobile | Dart/Flutter | `.dart` |
 | Schema | Protocol Buffers, WSDL/XSD | `.proto`, `.wsdl`, `.xsd` |
@@ -328,6 +329,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.21.0
+- **PHP support** — full tree-sitter parser for PHP: namespaces, classes (extends/implements), interfaces, traits, enums, functions, methods, constants, properties, `use` imports, trait `use`; file extensions `.php`, `.phtml`
 
 ### 3.20.0
 - **`.d.ts` indexing from `node_modules`** — Frontend projects automatically index TypeScript type declarations from dependencies; resolves pnpm symlinks safely (no `follow_links` on FUSE mounts)
