@@ -19,6 +19,8 @@ Fast code search CLI for 17 programming languages. Native Rust implementation.
 
 Project type is auto-detected.
 
+**[Setup guide for your project](docs/setup-guide.md)** — install, commands, and usage examples.
+
 ## Installation
 
 ### Homebrew (macOS/Linux)
