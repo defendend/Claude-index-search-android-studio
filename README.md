@@ -1,4 +1,4 @@
-# ast-index v3.22.0
+# ast-index v3.22.1
 
 Fast code search CLI for 17 programming languages. Native Rust implementation.
 
@@ -330,6 +330,9 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.22.1
+- **`--project-type` flag** — force project type in `rebuild` when auto-detection is wrong (e.g., `ast-index rebuild --project-type dart`)
 
 ### 3.22.0
 - **BSL (1C:Enterprise) support** — full tree-sitter parser for BSL/OneScript: procedures, functions, variables, regions; file extensions `.bsl`, `.os`
