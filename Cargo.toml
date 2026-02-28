@@ -1,6 +1,6 @@
 [package]
 name = "ast-index"
-version = "3.22.1"
+version = "3.23.0"
 edition = "2021"
 description = "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, Dart/Flutter, Scala, PHP, Perl, Python, Go, C++, and Protocol Buffers projects"
 license = "MIT"
@@ -49,6 +49,12 @@ tree-sitter-objc = "3.0"
 tree-sitter-proto = "0.4"
 tree-sitter-scala = "0.24"
 tree-sitter-php = "0.24"
+tree-sitter-lua = "0.5"
+tree-sitter-elixir = "0.3"
+tree-sitter-bash = "0.25"
+tree-sitter-sql = "0.0.2"
+tree-sitter-groovy = "0.1"
+tree-sitter-r = "1.2"
 fs2 = "0.4.3"
 
 [build-dependencies]
