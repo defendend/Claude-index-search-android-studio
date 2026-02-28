@@ -96,9 +96,10 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "ast-index"
-version = "3.21.1"
+version = "3.22.0"
 dependencies = [
  "anyhow",
+ "cc",
  "clap",
  "colored",
  "criterion",

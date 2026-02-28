@@ -343,6 +343,7 @@ pub use wsdl::parse_wsdl_symbols;
 /// File type for parser dispatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
+    Bsl,
     Kotlin,
     Java,
     Swift,
@@ -368,6 +369,7 @@ impl FileType {
     /// Determine file type from extension, returns None for unsupported extensions
     pub fn from_extension(ext: &str) -> Option<FileType> {
         match ext {
+            "bsl" | "os" => Some(FileType::Bsl),
             "kt" => Some(FileType::Kotlin),
             "java" => Some(FileType::Java),
             "swift" => Some(FileType::Swift),
@@ -402,7 +404,7 @@ pub fn is_supported_extension(ext: &str) -> bool {
 fn strip_comments(content: &str, file_type: FileType) -> String {
     match file_type {
         // C-style comments (no nesting)
-        FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
+        FileType::Bsl | FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
         FileType::CSharp | FileType::Proto | FileType::TypeScript |
         FileType::Dart | FileType::Cpp | FileType::Scala | FileType::Php => strip_c_comments(content, false),
         // C-style comments with nesting support
@@ -557,6 +559,8 @@ mod tests {
 
     #[test]
     fn test_is_supported_extension() {
+        assert!(is_supported_extension("bsl"));
+        assert!(is_supported_extension("os"));
         assert!(is_supported_extension("kt"));
         assert!(is_supported_extension("java"));
         assert!(is_supported_extension("swift"));
@@ -774,6 +778,8 @@ mod tests {
 
     #[test]
     fn test_file_type_from_extension() {
+        assert_eq!(FileType::from_extension("bsl"), Some(FileType::Bsl));
+        assert_eq!(FileType::from_extension("os"), Some(FileType::Bsl));
         assert_eq!(FileType::from_extension("kt"), Some(FileType::Kotlin));
         assert_eq!(FileType::from_extension("java"), Some(FileType::Java));
         assert_eq!(FileType::from_extension("swift"), Some(FileType::Swift));
