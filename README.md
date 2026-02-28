@@ -44,7 +44,7 @@ brew install ast-index
 git clone https://github.com/defendend/Claude-ast-index-search.git
 cd Claude-ast-index-search
 cargo build --release
-# Binary: target/release/ast-index (~4.4 MB)
+# Binary: target/release/ast-index (~40 MB)
 ```
 
 ### Troubleshooting: Syntax errors on install
