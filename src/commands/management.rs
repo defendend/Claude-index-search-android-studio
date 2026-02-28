@@ -19,7 +19,7 @@ use crate::indexer;
 const AUTO_SUB_PROJECTS_THRESHOLD: usize = 65_000;
 
 /// Rebuild the index (full or partial)
-pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: bool, sub_projects: bool, verbose: bool) -> Result<()> {
+pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: bool, sub_projects: bool, project_type: Option<indexer::ProjectType>, verbose: bool) -> Result<()> {
     if verbose {
         std::env::set_var("AST_INDEX_VERBOSE", "1");
         eprintln!("[verbose] rebuild started for: {}", root.display());
@@ -130,7 +130,7 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             println!("{}", "Rebuilding full index...".cyan());
             if verbose { eprintln!("[verbose] starting file walk + parse..."); }
             let t = Instant::now();
-            let walk = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            let walk = indexer::index_directory_with_type(&mut conn, root, true, no_ignore, project_type)?;
             let mut file_count = walk.file_count;
             if verbose { eprintln!("[verbose] index_directory: {} files in {:?}", file_count, t.elapsed()); }
 
@@ -270,7 +270,7 @@ pub fn cmd_rebuild(root: &Path, index_type: &str, index_deps: bool, no_ignore: b
             println!("{}", "Rebuilding symbols index...".cyan());
             conn.execute("DELETE FROM symbols", [])?;
             conn.execute("DELETE FROM files", [])?;
-            let walk = indexer::index_directory(&mut conn, root, true, no_ignore)?;
+            let walk = indexer::index_directory_with_type(&mut conn, root, true, no_ignore, project_type)?;
             println!("{}", format!("Indexed {} files", walk.file_count).green());
         }
         "modules" => {
@@ -365,7 +365,7 @@ fn cmd_rebuild_sub_projects(root: &Path, _index_type: &str, _index_deps: bool, n
         );
 
         let t = Instant::now();
-        match indexer::index_directory_scoped(&mut conn, root, path, true, no_ignore) {
+        match indexer::index_directory_scoped(&mut conn, root, path, true, no_ignore, None) {
             Ok(walk) => {
                 total_files += walk.file_count;
                 if verbose {

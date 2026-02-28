@@ -84,6 +84,29 @@ impl ProjectType {
     }
 }
 
+impl ProjectType {
+    pub fn from_str(s: &str) -> Option<ProjectType> {
+        match s.to_lowercase().as_str() {
+            "android" | "kotlin" | "java" => Some(ProjectType::Android),
+            "ios" | "swift" | "objc" => Some(ProjectType::IOS),
+            "perl" => Some(ProjectType::Perl),
+            "frontend" | "js" | "ts" | "typescript" | "javascript" => Some(ProjectType::Frontend),
+            "python" | "py" => Some(ProjectType::Python),
+            "go" | "golang" => Some(ProjectType::Go),
+            "rust" | "rs" => Some(ProjectType::Rust),
+            "bazel" => Some(ProjectType::Bazel),
+            "bsl" | "1c" | "onescript" => Some(ProjectType::Bsl),
+            "csharp" | "c#" | "cs" | "dotnet" | ".net" => Some(ProjectType::CSharp),
+            "cpp" | "c++" | "c" => Some(ProjectType::Cpp),
+            "dart" | "flutter" => Some(ProjectType::Dart),
+            "php" | "laravel" => Some(ProjectType::PHP),
+            "ruby" | "rb" | "rails" => Some(ProjectType::Ruby),
+            "scala" | "sbt" => Some(ProjectType::Scala),
+            _ => None,
+        }
+    }
+}
+
 /// Check if project has build system markers (Gradle/Maven build files)
 pub fn has_android_markers(root: &Path) -> bool {
     root.join("settings.gradle.kts").exists()
@@ -517,13 +540,17 @@ pub struct WalkResult {
 }
 
 pub fn index_directory(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool) -> Result<WalkResult> {
-    index_directory_scoped(conn, root, root, progress, no_ignore)
+    index_directory_scoped(conn, root, root, progress, no_ignore, None)
+}
+
+pub fn index_directory_with_type(conn: &mut Connection, root: &Path, progress: bool, no_ignore: bool, project_type: Option<ProjectType>) -> Result<WalkResult> {
+    index_directory_scoped(conn, root, root, progress, no_ignore, project_type)
 }
 
 /// Index a directory, walking `walk_dir` but storing paths relative to `root`.
 /// When walk_dir == root, behaves identically to index_directory.
 /// When walk_dir is a subdirectory of root, only indexes that subdirectory.
-pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Path, progress: bool, no_ignore: bool) -> Result<WalkResult> {
+pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Path, progress: bool, no_ignore: bool, project_type_override: Option<ProjectType>) -> Result<WalkResult> {
     use ignore::WalkBuilder;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Instant;
@@ -534,10 +561,14 @@ pub fn index_directory_scoped(conn: &mut Connection, root: &Path, walk_dir: &Pat
     // Peak memory: ~CHUNK_SIZE × (file content + ParsedFile), then freed each iteration
     const CHUNK_SIZE: usize = 500;
 
-    // Detect project type
-    let project_type = detect_project_type(walk_dir);
+    // Detect project type (or use override)
+    let project_type = project_type_override.unwrap_or_else(|| detect_project_type(walk_dir));
     if progress {
-        eprintln!("Detected project type: {}", project_type.as_str());
+        if project_type_override.is_some() {
+            eprintln!("Forced project type: {}", project_type.as_str());
+        } else {
+            eprintln!("Detected project type: {}", project_type.as_str());
+        }
     }
 
     // Collect all file paths (paths are lightweight, OK to keep in memory)
