@@ -1,4 +1,4 @@
-# ast-index v3.23.0
+# ast-index v3.24.0
 
 Fast code search CLI for 23 programming languages. Native Rust implementation.
 
@@ -336,6 +336,19 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.24.0
+- **BSL parser: all 7 issues fixed** — complete overhaul of 1C:Enterprise BSL parser per official 8.3.27 documentation
+  - `SymbolKind::Procedure` — procedures and functions now distinguished
+  - Compilation directives (`&НаКлиенте`, `&AtServer`, etc.) indexed as `Annotation`
+  - `Export`/`Экспорт` keyword captured in signature
+  - Extension annotations (`&Перед`, `&После`, `&Вместо`, `&ИзменениеИКонтроль`) indexed
+  - `extract_refs` — full Cyrillic support via `\p{Cyrillic}` regex
+  - `strip_comments` — BSL uses `//` only, no `/* */`
+  - `Асинх`/`Async` modifier — grammar.js rewritten from scratch, parser.c regenerated with `tree-sitter generate`
+- **tree-sitter-bsl grammar rewrite** — new grammar.js covering all BSL 8.3.27 constructs: procedures, functions, variables, regions, annotations, preprocessor directives, async/await, goto, handler statements
+- **52 BSL keywords** in ref filter (26 Russian + 26 English), per official reserved words list
+- 16 BSL tests, 457 total tests
 
 ### 3.23.0
 - **6 new languages** — Lua (`.lua`), Elixir (`.ex`, `.exs`), Bash (`.sh`, `.bash`, `.zsh`), SQL (`.sql`), Groovy (`.groovy`, `.gradle`), R (`.r`, `.R`); all with full tree-sitter AST parsing

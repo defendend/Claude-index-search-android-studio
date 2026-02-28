@@ -62,6 +62,24 @@ use anyhow::Result;
 use regex::Regex;
 use std::sync::LazyLock;
 
+/// Strip // line comments only (no block comments). Used for BSL.
+fn strip_line_comments(content: &str) -> String {
+    let mut result = String::with_capacity(content.len());
+    for line in content.lines() {
+        if let Some(pos) = line.find("//") {
+            result.push_str(&line[..pos]);
+            // Pad with spaces to preserve column positions
+            for _ in 0..(line.len() - pos) {
+                result.push(' ');
+            }
+        } else {
+            result.push_str(line);
+        }
+        result.push('\n');
+    }
+    result
+}
+
 /// Strip C-style comments (// and /* */) while preserving line numbers.
 /// Replaces comment content with spaces so line numbers remain correct.
 /// Supports nested block comments for Swift and Rust.
@@ -416,7 +434,10 @@ pub fn is_supported_extension(ext: &str) -> bool {
 fn strip_comments(content: &str, file_type: FileType) -> String {
     match file_type {
         // C-style comments (no nesting)
-        FileType::Bsl | FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
+        // BSL: only // line comments, no block comments /* */
+        FileType::Bsl => strip_line_comments(content),
+        // C-style comments (no nesting)
+        FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
         FileType::CSharp | FileType::Proto | FileType::TypeScript |
         FileType::Dart | FileType::Cpp | FileType::Scala | FileType::Php |
         FileType::Groovy | FileType::Lua => strip_c_comments(content, false),

@@ -386,6 +386,7 @@ pub enum SymbolKind {
     Object,
     Enum,
     Function,
+    Procedure,
     Property,
     TypeAlias,
     // Perl-specific
@@ -405,6 +406,7 @@ impl SymbolKind {
             SymbolKind::Object => "object",
             SymbolKind::Enum => "enum",
             SymbolKind::Function => "function",
+            SymbolKind::Procedure => "procedure",
             SymbolKind::Property => "property",
             SymbolKind::TypeAlias => "typealias",
             SymbolKind::Package => "package",

@@ -1,0 +1,16 @@
+{
+  "name": "tree-sitter-bsl",
+  "version": "1.0.0",
+  "main": "bindings/node",
+  "types": "bindings/node",
+  "dependencies": {},
+  "devDependencies": {
+    "tree-sitter-cli": "^0.26.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.bsl",
+      "file-types": ["bsl", "os"]
+    }
+  ]
+}

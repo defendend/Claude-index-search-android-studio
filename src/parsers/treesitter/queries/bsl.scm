@@ -1,10 +1,10 @@
-; Procedure declaration
+; Procedure declaration (capture full node for export/annotation access)
 (procedure_declaration
-  name: (identifier) @proc_name)
+  name: (identifier) @proc_name) @proc_decl
 
-; Function declaration
+; Function declaration (capture full node for export/annotation access)
 (function_declaration
-  name: (identifier) @func_name)
+  name: (identifier) @func_name) @func_decl
 
 ; Module-level variable declaration
 (source_file
@@ -16,3 +16,7 @@
 (region
   (region_start
     name: (identifier) @region_name))
+
+; Standalone annotation (compilation directives & extension annotations)
+(annotation
+  name: (annotation_name) @annotation_name)
