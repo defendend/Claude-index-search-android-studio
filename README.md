@@ -1,4 +1,4 @@
-# ast-index v3.21.0
+# ast-index v3.21.1
 
 Fast code search CLI for 16 programming languages. Native Rust implementation.
 
@@ -329,6 +329,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.21.1
+- **Fix: Windows home directory indexing** — `find_project_root()` now stops at `$HOME` boundary, preventing indexing of entire user directory when stale DB exists above project
+- **Flutter/Dart project detection** — added `pubspec.yaml` as project root marker
+- **Expanded project markers** — added VCS (`.git`, `.arc/HEAD`), Rust (`Cargo.toml`), Node.js (`package.json`), Go (`go.mod`), Python (`pyproject.toml`, `setup.py`), C# (`*.sln`) root detection
 
 ### 3.21.0
 - **PHP support** — full tree-sitter parser for PHP: namespaces, classes (extends/implements), interfaces, traits, enums, functions, methods, constants, properties, `use` imports, trait `use`; file extensions `.php`, `.phtml`

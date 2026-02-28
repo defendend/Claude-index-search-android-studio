@@ -803,9 +803,20 @@ fn cmd_install_claude_plugin() -> Result<()> {
 
 fn find_project_root() -> Result<PathBuf> {
     let cwd = std::env::current_dir()?;
+    let home = dirs::home_dir();
     for ancestor in cwd.ancestors() {
+        // Never go above $HOME — prevents indexing entire user directory
+        if let Some(ref h) = home {
+            if ancestor == h.as_path() {
+                break;
+            }
+        }
         // Check if an index DB already exists for this ancestor
         if db::db_exists(ancestor) {
+            return Ok(ancestor.to_path_buf());
+        }
+        // VCS markers
+        if ancestor.join(".git").exists() || ancestor.join(".arc").join("HEAD").exists() {
             return Ok(ancestor.to_path_buf());
         }
         // Android/Gradle markers
@@ -824,6 +835,37 @@ fn find_project_root() -> Result<PathBuf> {
                 if entry.path().extension().map(|e| e == "xcodeproj").unwrap_or(false) {
                     return Ok(ancestor.to_path_buf());
                 }
+            }
+        }
+        // Dart/Flutter markers
+        if ancestor.join("pubspec.yaml").exists() {
+            return Ok(ancestor.to_path_buf());
+        }
+        // Rust markers
+        if ancestor.join("Cargo.toml").exists() {
+            return Ok(ancestor.to_path_buf());
+        }
+        // Node.js markers
+        if ancestor.join("package.json").exists() {
+            return Ok(ancestor.to_path_buf());
+        }
+        // Go markers
+        if ancestor.join("go.mod").exists() {
+            return Ok(ancestor.to_path_buf());
+        }
+        // Python markers
+        if ancestor.join("pyproject.toml").exists()
+            || ancestor.join("setup.py").exists()
+        {
+            return Ok(ancestor.to_path_buf());
+        }
+        // C#/.NET markers
+        if let Ok(entries) = std::fs::read_dir(ancestor) {
+            let has_sln = entries
+                .flatten()
+                .any(|e| e.path().extension().map(|ext| ext == "sln").unwrap_or(false));
+            if has_sln {
+                return Ok(ancestor.to_path_buf());
             }
         }
         // Bazel markers
