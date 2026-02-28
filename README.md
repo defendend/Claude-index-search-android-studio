@@ -335,6 +335,7 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 - **BSL (1C:Enterprise) support** — full tree-sitter parser for BSL/OneScript: procedures, functions, variables, regions; file extensions `.bsl`, `.os`
 - **BSL project detection** — detects 1C projects by `Configuration.mdo`, `Configuration.xml`, `ConfigDumpInfo.xml`, `packagedef`, or `.bsl`/`.os` files
 - **Project type detection for all languages** — added C# (`.sln`, `.csproj`), C++ (`CMakeLists.txt`), Dart/Flutter (`pubspec.yaml`), PHP (`composer.json`), Ruby (`Gemfile`, `.gemspec`), Scala (`build.sbt`)
+- **`--project-type` flag** — force project type in `rebuild` when auto-detection is wrong (e.g., `ast-index rebuild --project-type dart`)
 
 ### 3.21.1
 - **Fix: Windows home directory indexing** — `find_project_root()` now stops at `$HOME` boundary, preventing indexing of entire user directory when stale DB exists above project
