@@ -3,20 +3,26 @@
 //! Each language module implements `TreeSitterParser` which provides
 //! `parse_symbols()` to extract symbols from source code using tree-sitter queries.
 
+pub mod bash;
 pub mod bsl;
 pub mod cpp;
 pub mod csharp;
 pub mod dart;
+pub mod elixir;
 pub mod go;
+pub mod groovy;
 pub mod java;
 pub mod kotlin;
+pub mod lua;
 pub mod objc;
 pub mod php;
 pub mod proto;
 pub mod python;
+pub mod r_lang;
 pub mod ruby;
 pub mod rust_lang;
 pub mod scala;
+pub mod sql;
 pub mod swift;
 pub mod typescript;
 
@@ -40,20 +46,26 @@ pub trait LanguageParser: Send + Sync {
 /// Get a tree-sitter parser for the given file type, if available
 pub fn get_treesitter_parser(file_type: FileType) -> Option<&'static dyn LanguageParser> {
     match file_type {
+        FileType::Bash => Some(&bash::BASH_PARSER),
         FileType::Bsl => Some(&bsl::BSL_PARSER),
         FileType::Cpp => Some(&cpp::CPP_PARSER),
         FileType::CSharp => Some(&csharp::CSHARP_PARSER),
         FileType::Dart => Some(&dart::DART_PARSER),
+        FileType::Elixir => Some(&elixir::ELIXIR_PARSER),
         FileType::Go => Some(&go::GO_PARSER),
+        FileType::Groovy => Some(&groovy::GROOVY_PARSER),
         FileType::Java => Some(&java::JAVA_PARSER),
         FileType::Kotlin => Some(&kotlin::KOTLIN_PARSER),
+        FileType::Lua => Some(&lua::LUA_PARSER),
         FileType::ObjC => Some(&objc::OBJC_PARSER),
         FileType::Php => Some(&php::PHP_PARSER),
         FileType::Proto => Some(&proto::PROTO_PARSER),
         FileType::Python => Some(&python::PYTHON_PARSER),
+        FileType::R => Some(&r_lang::R_PARSER),
         FileType::Ruby => Some(&ruby::RUBY_PARSER),
         FileType::Rust => Some(&rust_lang::RUST_PARSER),
         FileType::Scala => Some(&scala::SCALA_PARSER),
+        FileType::Sql => Some(&sql::SQL_PARSER),
         FileType::Swift => Some(&swift::SWIFT_PARSER),
         FileType::TypeScript => Some(&typescript::TYPESCRIPT_PARSER),
         _ => None,

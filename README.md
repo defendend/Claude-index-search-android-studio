@@ -1,6 +1,6 @@
-# ast-index v3.22.1
+# ast-index v3.23.0
 
-Fast code search CLI for 17 programming languages. Native Rust implementation.
+Fast code search CLI for 23 programming languages. Native Rust implementation.
 
 ## Supported Projects
 
@@ -16,6 +16,10 @@ Fast code search CLI for 17 programming languages. Native Rust implementation.
 | Mobile | Dart/Flutter | `.dart` |
 | Schema | Protocol Buffers, WSDL/XSD | `.proto`, `.wsdl`, `.xsd` |
 | Enterprise | BSL (1C:Enterprise) | `.bsl`, `.os` |
+| Scripting | Lua, Bash | `.lua`, `.sh`, `.bash`, `.zsh` |
+| Functional | Elixir | `.ex`, `.exs` |
+| Data | SQL, R | `.sql`, `.r`, `.R` |
+| JVM | Groovy | `.groovy`, `.gradle` |
 
 Project type is auto-detected.
 
@@ -332,6 +336,10 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.23.0
+- **6 new languages** — Lua (`.lua`), Elixir (`.ex`, `.exs`), Bash (`.sh`, `.bash`, `.zsh`), SQL (`.sql`), Groovy (`.groovy`, `.gradle`), R (`.r`, `.R`); all with full tree-sitter AST parsing
+- 23 languages supported, 447 tests
 
 ### 3.22.1
 - **`--project-type` flag** — force project type in `rebuild` when auto-detection is wrong (e.g., `ast-index rebuild --project-type dart`)

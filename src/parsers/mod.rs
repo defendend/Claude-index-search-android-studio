@@ -363,6 +363,12 @@ pub enum FileType {
     Svelte,
     Scala,
     Php,
+    Lua,
+    Elixir,
+    Bash,
+    Groovy,
+    R,
+    Sql,
 }
 
 impl FileType {
@@ -390,6 +396,12 @@ impl FileType {
             "svelte" => Some(FileType::Svelte),
             "scala" | "sc" => Some(FileType::Scala),
             "php" | "phtml" => Some(FileType::Php),
+            "lua" => Some(FileType::Lua),
+            "ex" | "exs" => Some(FileType::Elixir),
+            "sh" | "bash" | "zsh" => Some(FileType::Bash),
+            "sql" => Some(FileType::Sql),
+            "groovy" | "gradle" => Some(FileType::Groovy),
+            "r" | "R" => Some(FileType::R),
             _ => None,
         }
     }
@@ -406,7 +418,8 @@ fn strip_comments(content: &str, file_type: FileType) -> String {
         // C-style comments (no nesting)
         FileType::Bsl | FileType::Kotlin | FileType::Java | FileType::ObjC | FileType::Go |
         FileType::CSharp | FileType::Proto | FileType::TypeScript |
-        FileType::Dart | FileType::Cpp | FileType::Scala | FileType::Php => strip_c_comments(content, false),
+        FileType::Dart | FileType::Cpp | FileType::Scala | FileType::Php |
+        FileType::Groovy | FileType::Lua => strip_c_comments(content, false),
         // C-style comments with nesting support
         FileType::Swift | FileType::Rust => strip_c_comments(content, true),
         // Hash comments + docstrings
@@ -426,6 +439,12 @@ fn strip_comments(content: &str, file_type: FileType) -> String {
         }
         // XML comments
         FileType::Wsdl => strip_xml_comments(content),
+        // Hash comments
+        FileType::Bash | FileType::R | FileType::Elixir => strip_hash_comments(content),
+
+        // SQL: -- line comments and /* */ block comments (C-style)
+        FileType::Sql => strip_c_comments(content, false),
+
         // Vue/Svelte: comments stripped after script extraction
         FileType::Vue | FileType::Svelte => content.to_string(),
     }
