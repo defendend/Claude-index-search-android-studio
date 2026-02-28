@@ -49,6 +49,13 @@ pub enum ProjectType {
     Go,        // Go - go.mod
     Rust,      // Rust - Cargo.toml
     Bazel,     // Bazel - BUILD, WORKSPACE
+    Bsl,       // 1C:Enterprise - Configuration.mdo, Configuration.xml, .bsl files
+    CSharp,    // C# - *.csproj, *.sln
+    Cpp,       // C++ - CMakeLists.txt with .cpp/.h files
+    Dart,      // Dart/Flutter - pubspec.yaml
+    PHP,       // PHP - composer.json
+    Ruby,      // Ruby - Gemfile, *.gemspec
+    Scala,     // Scala - build.sbt
     Mixed,     // Multiple platforms present
     Unknown,
 }
@@ -64,6 +71,13 @@ impl ProjectType {
             ProjectType::Go => "Go",
             ProjectType::Rust => "Rust",
             ProjectType::Bazel => "Bazel",
+            ProjectType::Bsl => "1C:Enterprise (BSL)",
+            ProjectType::CSharp => "C# (.NET)",
+            ProjectType::Cpp => "C/C++",
+            ProjectType::Dart => "Dart/Flutter",
+            ProjectType::PHP => "PHP",
+            ProjectType::Ruby => "Ruby",
+            ProjectType::Scala => "Scala",
             ProjectType::Mixed => "Mixed",
             ProjectType::Unknown => "Unknown",
         }
@@ -197,8 +211,69 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         || root.join("WORKSPACE.bazel").exists()
         || root.join("MODULE.bazel").exists();
 
+    // 1C:Enterprise (BSL) project detection
+    let has_bsl = root.join("src/Configuration/Configuration.mdo").exists()
+        || root.join("Configuration/Configuration.mdo").exists()
+        || root.join("Configuration.xml").exists()
+        || root.join("ConfigDumpInfo.xml").exists()
+        || root.join("packagedef").exists()
+        || fs::read_dir(root)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .any(|e| e.path().extension().map(|ext| ext == "bsl" || ext == "os").unwrap_or(false))
+            })
+            .unwrap_or(false);
+
+    // C# project detection
+    let has_csharp = root.join("Directory.Build.props").exists()
+        || fs::read_dir(root)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .any(|e| {
+                        e.path()
+                            .extension()
+                            .map(|ext| ext == "sln" || ext == "csproj")
+                            .unwrap_or(false)
+                    })
+            })
+            .unwrap_or(false);
+
+    // C++ project detection (CMakeLists.txt without other markers)
+    let has_cpp = root.join("CMakeLists.txt").exists()
+        || (root.join("Makefile").exists() && !has_perl);
+
+    // Dart/Flutter project detection
+    let has_dart = root.join("pubspec.yaml").exists();
+
+    // PHP project detection
+    let has_php = root.join("composer.json").exists();
+
+    // Ruby project detection
+    let has_ruby = root.join("Gemfile").exists()
+        || fs::read_dir(root)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .any(|e| {
+                        e.path()
+                            .extension()
+                            .map(|ext| ext == "gemspec")
+                            .unwrap_or(false)
+                    })
+            })
+            .unwrap_or(false);
+
+    // Scala project detection
+    let has_scala = root.join("build.sbt").exists();
+
     // Count how many platforms are detected
-    let count = [has_gradle, has_swift, has_perl, has_frontend, has_python, has_go, has_rust, has_bazel]
+    let count = [
+        has_gradle, has_swift, has_perl, has_frontend, has_python, has_go,
+        has_rust, has_bazel, has_bsl, has_csharp, has_cpp, has_dart,
+        has_php, has_ruby, has_scala,
+    ]
         .iter()
         .filter(|&&x| x)
         .count();
@@ -221,6 +296,20 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         ProjectType::Rust
     } else if has_bazel {
         ProjectType::Bazel
+    } else if has_bsl {
+        ProjectType::Bsl
+    } else if has_csharp {
+        ProjectType::CSharp
+    } else if has_dart {
+        ProjectType::Dart
+    } else if has_cpp {
+        ProjectType::Cpp
+    } else if has_php {
+        ProjectType::PHP
+    } else if has_ruby {
+        ProjectType::Ruby
+    } else if has_scala {
+        ProjectType::Scala
     } else {
         ProjectType::Unknown
     }
@@ -2214,6 +2303,77 @@ mod tests {
         fs::write(dir.path().join("Cargo.toml"), "").unwrap();
         fs::write(dir.path().join("package.json"), "{}").unwrap();
         assert_eq!(detect_project_type(dir.path()), ProjectType::Mixed);
+    }
+
+    #[test]
+    fn test_detect_bsl_project_by_file() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("module.bsl"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Bsl);
+    }
+
+    #[test]
+    fn test_detect_bsl_project_edt() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("src/Configuration")).unwrap();
+        fs::write(dir.path().join("src/Configuration/Configuration.mdo"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Bsl);
+    }
+
+    #[test]
+    fn test_detect_csharp_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("MyApp.sln"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::CSharp);
+    }
+
+    #[test]
+    fn test_detect_csharp_project_csproj() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("MyApp.csproj"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::CSharp);
+    }
+
+    #[test]
+    fn test_detect_cpp_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("CMakeLists.txt"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Cpp);
+    }
+
+    #[test]
+    fn test_detect_dart_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Dart);
+    }
+
+    #[test]
+    fn test_detect_php_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("composer.json"), "{}").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::PHP);
+    }
+
+    #[test]
+    fn test_detect_ruby_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("Gemfile"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Ruby);
+    }
+
+    #[test]
+    fn test_detect_ruby_project_gemspec() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("mylib.gemspec"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Ruby);
+    }
+
+    #[test]
+    fn test_detect_scala_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("build.sbt"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Scala);
     }
 
     #[test]

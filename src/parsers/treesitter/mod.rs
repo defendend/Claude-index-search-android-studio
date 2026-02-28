@@ -3,6 +3,7 @@
 //! Each language module implements `TreeSitterParser` which provides
 //! `parse_symbols()` to extract symbols from source code using tree-sitter queries.
 
+pub mod bsl;
 pub mod cpp;
 pub mod csharp;
 pub mod dart;
@@ -39,6 +40,7 @@ pub trait LanguageParser: Send + Sync {
 /// Get a tree-sitter parser for the given file type, if available
 pub fn get_treesitter_parser(file_type: FileType) -> Option<&'static dyn LanguageParser> {
     match file_type {
+        FileType::Bsl => Some(&bsl::BSL_PARSER),
         FileType::Cpp => Some(&cpp::CPP_PARSER),
         FileType::CSharp => Some(&csharp::CSHARP_PARSER),
         FileType::Dart => Some(&dart::DART_PARSER),

@@ -1,6 +1,6 @@
-# ast-index v3.21.1
+# ast-index v3.22.0
 
-Fast code search CLI for 16 programming languages. Native Rust implementation.
+Fast code search CLI for 17 programming languages. Native Rust implementation.
 
 ## Supported Projects
 
@@ -15,6 +15,7 @@ Fast code search CLI for 16 programming languages. Native Rust implementation.
 | Scripting | Ruby, Perl | `.rb`, `.pm`, `.pl`, `.t` |
 | Mobile | Dart/Flutter | `.dart` |
 | Schema | Protocol Buffers, WSDL/XSD | `.proto`, `.wsdl`, `.xsd` |
+| Enterprise | BSL (1C:Enterprise) | `.bsl`, `.os` |
 
 Project type is auto-detected.
 
@@ -329,6 +330,11 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.22.0
+- **BSL (1C:Enterprise) support** — full tree-sitter parser for BSL/OneScript: procedures, functions, variables, regions; file extensions `.bsl`, `.os`
+- **BSL project detection** — detects 1C projects by `Configuration.mdo`, `Configuration.xml`, `ConfigDumpInfo.xml`, `packagedef`, or `.bsl`/`.os` files
+- **Project type detection for all languages** — added C# (`.sln`, `.csproj`), C++ (`CMakeLists.txt`), Dart/Flutter (`pubspec.yaml`), PHP (`composer.json`), Ruby (`Gemfile`, `.gemspec`), Scala (`build.sbt`)
 
 ### 3.21.1
 - **Fix: Windows home directory indexing** — `find_project_root()` now stops at `$HOME` boundary, preventing indexing of entire user directory when stale DB exists above project
