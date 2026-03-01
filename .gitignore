@@ -1,4 +1,7 @@
 /target
 .claude/
 dist/
-mobile-tools/target/
+mobile-tools/
+.mcp.json
+.catalyst/
+.glm-cli/
